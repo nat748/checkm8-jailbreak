@@ -48,7 +48,11 @@
       "Bash(grep -E '\\\\\\\\r')",
       "Bash(python -c \"import sys; data = open\\(''n:/checkm8-jailbreak/config/pongoos_setup.py'', ''rb''\\).read\\(\\)[:1000]; print\\(''CRLF count:'', data.count\\(b''\\\\r\\\\n''\\)\\); print\\(''LF-only count:'', data.count\\(b''\\\\n''\\) - data.count\\(b''\\\\r\\\\n''\\)\\)\")",
       "Bash(ls -1 /n/checkm8-jailbreak/gui/*.py)",
-      "Bash(curl -sL https://api.github.com/repos/karamzaki/pongoOS-QEMU)"
+      "Bash(curl -sL https://api.github.com/repos/karamzaki/pongoOS-QEMU)",
+      "Bash(wsl -d Ubuntu -- ls /opt/ios-arm64e-clang-toolchain/bin/)",
+      "Bash(wsl -- ls /opt/ios-arm64e-clang-toolchain/bin/)",
+      "Bash(wsl bash -c \"ls /opt/ios-arm64e-clang-toolchain/bin/ 2>/dev/null | head -30\")",
+      "Bash(wsl bash -c \"ls /opt/ios-arm64e-clang-toolchain/bin/ | grep -i arm64\")"
     ]
   }
 }

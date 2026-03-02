@@ -25,21 +25,31 @@ def is_macos(platform):
 
 
 PONGOOS_REPO = "https://github.com/karamzaki/pongoOS-QEMU.git"
-PONGOOS_DOCKER_IMAGE = "checkra1n/build-pongo"
+
+# checkra1n Debian repo provides ld64 and cctools-strip for Linux cross-compilation
+CHECKRA1N_REPO_LINE = "deb https://assets.checkra.in/debian /"
+CHECKRA1N_KEY_URL = "https://assets.checkra.in/debian/archive.key"
 
 # pongoOS setup steps
 PONGOOS_STEPS = [
     {
         "id": "pongo_deps",
-        "name": "Install QEMU & Docker",
-        "description": "Install QEMU emulator and Docker (for building pongoOS)",
+        "name": "Install Dependencies",
+        "description": "Install QEMU and build tools",
         "platforms": ["windows", "linux", "macos", "macos-arm64"],
+        "automated": True,
+    },
+    {
+        "id": "pongo_toolchain",
+        "name": "Setup Toolchain",
+        "description": "Install clang, ld64, and cctools-strip from checkra1n repo",
+        "platforms": ["windows", "linux"],
         "automated": True,
     },
     {
         "id": "pongo_download",
         "name": "Clone & Build pongoOS",
-        "description": "Clone pongoOS-QEMU and build via Docker",
+        "description": "Clone pongoOS-QEMU and build from source",
         "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
     },
@@ -53,14 +63,14 @@ PONGOOS_STEPS = [
 ]
 
 
-def _script_install_qemu(platform, work_dir):
-    """Install QEMU emulator and Docker."""
+def _script_install_deps(platform, work_dir):
+    """Install QEMU emulator and build tools."""
     if is_macos(platform):
         arch_note = "ARM64 (Apple Silicon)" if platform == "macos-arm64" else "x86_64 (Intel)"
         return f'''
 echo "SS_INFO:Detected macOS {arch_note}"
-echo "SS_INFO:Installing QEMU and Docker via Homebrew..."
-brew install qemu docker || exit 1
+echo "SS_INFO:Installing QEMU via Homebrew..."
+brew install qemu || exit 1
 echo "SS_INFO:Verifying QEMU installation..."
 if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
     echo "SS_ERROR:qemu-system-aarch64 not found after install"
@@ -68,13 +78,6 @@ if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
 fi
 echo "SS_INFO:QEMU installed successfully"
 qemu-system-aarch64 --version
-echo "SS_INFO:Verifying Docker installation..."
-if ! command -v docker >/dev/null 2>&1; then
-    echo "SS_WARN:Docker not found. Install Docker Desktop for macOS to enable building pongoOS."
-else
-    echo "SS_INFO:Docker installed successfully"
-    docker --version
-fi
 '''
     # linux / windows (WSL)
     return '''
@@ -83,9 +86,10 @@ if ! sudo -n true 2>/dev/null; then
     echo "SS_ERROR:sudo requires a password. Set up passwordless sudo first."
     exit 1
 fi
-echo "SS_INFO:Installing QEMU via apt..."
+echo "SS_INFO:Installing QEMU and build tools via apt..."
 sudo -n apt-get update || exit 1
-sudo -n apt-get install -y qemu-system-arm qemu-system-aarch64 || exit 1
+sudo -n apt-get install -y qemu-system-arm qemu-system-aarch64 \
+    automake make autoconf git wget tar xz-utils lzma xxd || exit 1
 echo "SS_INFO:Verifying QEMU installation..."
 if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
     echo "SS_ERROR:qemu-system-aarch64 not found after install"
@@ -93,24 +97,72 @@ if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
 fi
 echo "SS_INFO:QEMU installed successfully"
 qemu-system-aarch64 --version
+echo "SS_INFO:Build tools installed successfully"
+'''
 
-echo "SS_INFO:Checking Docker installation..."
-if ! command -v docker >/dev/null 2>&1; then
-    echo "SS_INFO:Installing Docker..."
-    sudo -n apt-get install -y docker.io || exit 1
+
+def _script_setup_toolchain(platform, work_dir):
+    """Install clang, ld64, and cctools-strip from checkra1n repo (Linux/WSL only)."""
+    return f'''
+echo "SS_INFO:Setting up cross-compilation toolchain (official checkra1n method)..."
+
+# Check if ld64 and cctools-strip are already installed
+if command -v ld64 >/dev/null 2>&1 && command -v cctools-strip >/dev/null 2>&1 && command -v clang >/dev/null 2>&1; then
+    echo "SS_INFO:All tools already installed"
+    echo "SS_INFO:clang: $(clang --version 2>&1 | head -1)"
+    echo "SS_INFO:ld64: $(which ld64)"
+    echo "SS_INFO:cctools-strip: $(which cctools-strip)"
+    echo "SS_INFO:Toolchain setup complete"
+    exit 0
 fi
-echo "SS_INFO:Ensuring Docker service is running..."
-sudo -n service docker start 2>/dev/null || true
-echo "SS_INFO:Adding user to docker group (may need re-login)..."
-sudo -n usermod -aG docker "$USER" 2>/dev/null || true
-echo "SS_INFO:Docker installed successfully"
-docker --version || echo "SS_WARN:Docker installed but may need re-login for group permissions"
+
+# Add checkra1n Debian repo for ld64 and cctools-strip
+echo "SS_INFO:Adding checkra1n Debian repository..."
+if [ ! -f /etc/apt/sources.list.d/checkra1n.list ]; then
+    echo "{CHECKRA1N_REPO_LINE}" > /tmp/checkra1n.list
+    sudo -n cp /tmp/checkra1n.list /etc/apt/sources.list.d/checkra1n.list || exit 1
+    rm -f /tmp/checkra1n.list
+    echo "SS_INFO:Importing checkra1n GPG key..."
+    sudo -n apt-key adv --fetch-keys {CHECKRA1N_KEY_URL} || exit 1
+else
+    echo "SS_INFO:checkra1n repo already configured"
+fi
+
+echo "SS_INFO:Updating package lists..."
+sudo -n apt-get update || exit 1
+
+# Install ld64 and cctools-strip from checkra1n repo
+echo "SS_INFO:Installing ld64 and cctools-strip..."
+sudo -n apt-get install -y ld64 cctools-strip || exit 1
+
+# Install system clang
+echo "SS_INFO:Installing clang..."
+sudo -n apt-get install -y clang || exit 1
+
+# Verify all tools
+echo "SS_INFO:Verifying toolchain..."
+if ! command -v clang >/dev/null 2>&1; then
+    echo "SS_ERROR:clang not found after install"
+    exit 1
+fi
+if ! command -v ld64 >/dev/null 2>&1; then
+    echo "SS_ERROR:ld64 not found after install"
+    exit 1
+fi
+if ! command -v cctools-strip >/dev/null 2>&1; then
+    echo "SS_ERROR:cctools-strip not found after install"
+    exit 1
+fi
+echo "SS_INFO:clang: $(clang --version 2>&1 | head -1)"
+echo "SS_INFO:ld64: $(which ld64)"
+echo "SS_INFO:cctools-strip: $(which cctools-strip)"
+echo "SS_INFO:Toolchain setup complete"
 '''
 
 
 def _script_download_pongoos(platform, work_dir):
-    """Clone pongoOS-QEMU and build using Docker (all platforms)."""
-    # Common clone step — same for all platforms
+    """Clone pongoOS-QEMU and build from source."""
+    # Common clone step
     clone_block = f'''
 cd "{work_dir}" || exit 1
 echo "SS_INFO:Cloning pongoOS-QEMU repository..."
@@ -125,25 +177,12 @@ else
 fi
 cd "{work_dir}/pongoOS-src" || exit 1
 '''
-    # Strip -Werror from all Makefiles (prevents warnings from killing the build)
+    # Strip -Werror from all Makefiles
     strip_werror = '''
 echo "SS_INFO:Patching Makefiles to disable -Werror..."
 find . -name "Makefile" -o -name "*.mk" | while read mf; do
     sed -i.bak 's/-Werror//g' "$mf" 2>/dev/null || true
 done
-'''
-    # Docker build — works on all platforms (Linux, WSL, macOS with Docker)
-    docker_build = f'''
-echo "SS_INFO:Building pongoOS via Docker ({PONGOOS_DOCKER_IMAGE})..."
-echo "SS_INFO:This downloads the cross-compilation toolchain and iOS SDK automatically."
-docker run --rm -v "$(pwd)":/pongo {PONGOOS_DOCKER_IMAGE} || exit 1
-'''
-    # Native macOS build fallback (if Docker unavailable)
-    native_macos_build = '''
-echo "SS_INFO:Docker not available, building natively with Xcode toolchain..."
-xcode-select --install 2>/dev/null || true
-make clean || true
-make || exit 1
 '''
     # Verify and copy output
     verify_block = f'''
@@ -177,31 +216,37 @@ ls -lh "{work_dir}/pongoOS"
 '''
 
     if is_macos(platform):
-        # macOS: try Docker first, fall back to native build
-        return clone_block + strip_werror + f'''
-if command -v docker >/dev/null 2>&1; then
-{docker_build}
-else
-{native_macos_build}
-fi
+        # macOS: build natively with Xcode toolchain
+        return clone_block + strip_werror + '''
+echo "SS_INFO:Building pongoOS with Xcode toolchain..."
+xcode-select --install 2>/dev/null || true
+make clean || true
+make || exit 1
 ''' + verify_block
 
-    # Linux / Windows (WSL): Docker build (has cross-compilation toolchain)
-    return clone_block + strip_werror + f'''
-if ! command -v docker >/dev/null 2>&1; then
-    echo "SS_ERROR:Docker is required to build pongoOS on Linux/WSL."
-    echo "SS_INFO:Install Docker with: sudo apt-get install docker.io"
-    echo "SS_INFO:Then re-run this step."
+    # Linux / Windows (WSL): build with system clang + ld64 + cctools-strip
+    # (official checkra1n build method)
+    return clone_block + strip_werror + '''
+# Verify cross-compilation tools are installed
+if ! command -v clang >/dev/null 2>&1; then
+    echo "SS_ERROR:clang not found. Run the Setup Toolchain step first."
+    exit 1
+fi
+if ! command -v ld64 >/dev/null 2>&1; then
+    echo "SS_ERROR:ld64 not found. Run the Setup Toolchain step first."
+    exit 1
+fi
+if ! command -v cctools-strip >/dev/null 2>&1; then
+    echo "SS_ERROR:cctools-strip not found. Run the Setup Toolchain step first."
     exit 1
 fi
 
-echo "SS_INFO:Checking Docker permissions..."
-if ! docker info >/dev/null 2>&1; then
-    echo "SS_INFO:Trying with sudo..."
-    sudo -n docker run --rm -v "$(pwd)":/pongo {PONGOOS_DOCKER_IMAGE} || exit 1
-else
-{docker_build}
-fi
+echo "SS_INFO:Using system clang + ld64 + cctools-strip (official method)"
+echo "SS_INFO:clang: $(clang --version 2>&1 | head -1)"
+
+echo "SS_INFO:Building pongoOS..."
+make clean || true
+EMBEDDED_CC=clang EMBEDDED_LDFLAGS="-fuse-ld=/usr/bin/ld64" STRIP=cctools-strip make all || exit 1
 ''' + verify_block
 
 
@@ -234,7 +279,8 @@ def get_script_for_step(step_id, platform, work_dir):
         Bash script string, or None for manual steps
     """
     scripts = {
-        "pongo_deps": _script_install_qemu,
+        "pongo_deps": _script_install_deps,
+        "pongo_toolchain": _script_setup_toolchain,
         "pongo_download": _script_download_pongoos,
         "pongo_test": _script_test_pongoos,
     }
