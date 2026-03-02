@@ -121,9 +121,17 @@ class SetupEngine:
                 text=True,
                 bufsize=1,
             )
+            # DEBUG: Log first 500 chars of clean script to see what we're sending
+            debug_script = clean_script.replace('\r', '')
+            import sys
+            with open('C:/Users/natha/script_debug.txt', 'w', encoding='utf-8', newline='\n') as f:
+                f.write(debug_script[:1000])
+                f.write("\n\n=== REPR ===\n")
+                f.write(repr(debug_script[:500]))
+
             # Final replace right before writing - text mode on Windows
             # will convert \n to \r\n, so strip any \r that got added
-            self._process.stdin.write(clean_script.replace('\r', ''))
+            self._process.stdin.write(debug_script)
             self._process.stdin.close()
 
             while True:
