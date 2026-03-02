@@ -130,29 +130,27 @@ fi
 
 # Configure QEMU build (minimal targets for pongoOS)
 echo "SS_INFO:Configuring QEMU build (aarch64 target only)..."
-rm -rf "$QEMU_BUILD"
-mkdir -p "$QEMU_BUILD"
-cd "$QEMU_BUILD" || exit 1
+cd "$QEMU_DIR" || exit 1
 
-meson setup "$QEMU_DIR" \
+# Clean any stale build files to avoid meson version conflicts
+echo "SS_INFO:Cleaning previous build artifacts..."
+make distclean 2>/dev/null || true
+
+"$QEMU_DIR/configure" \
     --prefix=/opt/utm-qemu \
-    --buildtype=release \
-    -Ddefault_devices=false \
-    -Dtargets=aarch64-softmmu \
-    -Daudio_drv_list= \
-    -Dblock_drv_rw_whitelist= \
-    -Dblock_drv_ro_whitelist= \
-    -Ddocs=disabled \
-    -Dtools=disabled || exit 1
+    --target-list=aarch64-softmmu \
+    --enable-tcg \
+    --disable-docs \
+    --disable-werror || exit 1
 
 # Build QEMU (use all CPU cores)
 echo "SS_INFO:Building QEMU (this may take 10-15 minutes)..."
 echo "SS_INFO:Using $(nproc 2>/dev/null || echo 4) CPU cores..."
-ninja -j$(nproc 2>/dev/null || echo 4) || exit 1
+make -j$(nproc 2>/dev/null || echo 4) || exit 1
 
 # Install to /opt/utm-qemu
 echo "SS_INFO:Installing QEMU to /opt/utm-qemu..."
-sudo -n ninja install || exit 1
+sudo -n make install || exit 1
 
 # Verify installation
 if [ -f "/opt/utm-qemu/bin/qemu-system-aarch64" ]; then
