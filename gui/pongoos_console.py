@@ -5,7 +5,7 @@ Shows real-time output from the pongoOS serial console.
 """
 
 import customtkinter as ctk
-from typing import Optional
+from typing import Callable, Optional
 
 from config.constants import (
     COLOR_BG,
@@ -23,7 +23,7 @@ from config.constants import (
 class PongoOSConsole(ctk.CTkToplevel):
     """Console window for pongoOS."""
 
-    def __init__(self, parent, on_send_command: Optional[callable] = None):
+    def __init__(self, parent, on_send_command: Optional[Callable] = None):
         """
         Initialize console window.
 

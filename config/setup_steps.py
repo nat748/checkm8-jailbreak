@@ -83,18 +83,18 @@ def _script_clone_inferno(platform, work_dir):
     return f'''
 cd "{work_dir}" || exit 1
 if [ -d "Inferno/.git" ]; then
-    SS_INFO:Inferno repo already exists, updating...
+    echo "SS_INFO:Inferno repo already exists, updating..."
     cd Inferno || exit 1
     git pull
     git submodule update --init
 else
-    SS_INFO:Cloning Inferno repository...
+    echo "SS_INFO:Cloning Inferno repository..."
     git clone https://github.com/ChefKissInc/Inferno
     cd Inferno || exit 1
-    SS_INFO:Initializing submodules...
+    echo "SS_INFO:Initializing submodules..."
     git submodule update --init
 fi
-SS_INFO:Inferno repository ready
+echo "SS_INFO:Inferno repository ready"
 '''
 
 
@@ -104,10 +104,10 @@ def _script_build_inferno(platform, work_dir):
         return f'''
 cd "{work_dir}/Inferno" || exit 1
 mkdir -p build && cd build || exit 1
-SS_INFO:Configuring Inferno build for macOS...
+echo "SS_INFO:Configuring Inferno build for macOS..."
 ARCH=$(uname -m)
 if [ "$ARCH" = "arm64" ]; then
-    SS_INFO:Detected Apple Silicon (arm64)
+    echo "SS_INFO:Detected Apple Silicon (arm64)"
     LIBTOOL="glibtool" ../configure \\
         --target-list=aarch64-softmmu,x86_64-softmmu \\
         --disable-bsd-user --disable-guest-agent \\
@@ -120,7 +120,7 @@ if [ "$ARCH" = "arm64" ]; then
         --extra-ldflags="-L/opt/homebrew/lib" \\
         --disable-werror --disable-tests --disable-qom-cast-debug --disable-plugins
 else
-    SS_INFO:Detected Intel (x86_64)
+    echo "SS_INFO:Detected Intel (x86_64)"
     LIBTOOL="glibtool" ../configure \\
         --target-list=aarch64-softmmu,x86_64-softmmu \\
         --disable-bsd-user --disable-guest-agent \\
@@ -132,15 +132,15 @@ else
         --disable-werror --disable-tests --disable-qom-cast-debug --disable-plugins \\
         --extra-cflags="-O3 -ffast-math -mtune=native"
 fi
-SS_INFO:Building Inferno (this may take 10-20 minutes)...
+echo "SS_INFO:Building Inferno (this may take 10-20 minutes)..."
 make -j$(sysctl -n hw.logicalcpu)
-SS_INFO:Inferno built successfully
+echo "SS_INFO:Inferno built successfully"
 '''
     # linux / windows WSL
     return f'''
 cd "{work_dir}/Inferno" || exit 1
 mkdir -p build && cd build || exit 1
-SS_INFO:Configuring Inferno build for Linux...
+echo "SS_INFO:Configuring Inferno build for Linux..."
 ../configure \\
     --target-list=aarch64-softmmu,x86_64-softmmu \\
     --enable-lzfse --enable-slirp --enable-capstone --enable-curses \\
@@ -148,9 +148,9 @@ SS_INFO:Configuring Inferno build for Linux...
     --enable-nettle --enable-gnutls --enable-gtk --enable-sdl \\
     --disable-werror --disable-tests --disable-qom-cast-debug --disable-plugins \\
     --extra-cflags="-O3 -ffast-math"
-SS_INFO:Building Inferno (this may take 10-20 minutes)...
+echo "SS_INFO:Building Inferno (this may take 10-20 minutes)..."
 make -j$(nproc)
-SS_INFO:Inferno built successfully
+echo "SS_INFO:Inferno built successfully"
 '''
 
 
@@ -159,10 +159,10 @@ def _script_create_disks(platform, work_dir):
 cd "{work_dir}" || exit 1
 QIMG="./Inferno/build/qemu-img"
 if [ ! -f "$QIMG" ]; then
-    SS_ERROR:qemu-img not found. Build Inferno first (step 3).
+    echo "SS_ERROR:qemu-img not found. Build Inferno first (step 3)."
     exit 1
 fi
-SS_INFO:Creating disk images (this may take a minute)...
+echo "SS_INFO:Creating disk images (this may take a minute)..."
 "$QIMG" create -f raw root 32G
 "$QIMG" create -f raw firmware 8M
 "$QIMG" create -f raw syscfg 128K
@@ -172,7 +172,7 @@ SS_INFO:Creating disk images (this may take a minute)...
 "$QIMG" create -f raw panic_log 1M
 "$QIMG" create -f raw sep_nvram 64K
 "$QIMG" create -f raw sep_ssc 128K
-SS_INFO:All 9 disk images created successfully
+echo "SS_INFO:All 9 disk images created successfully"
 '''
 
 
@@ -183,23 +183,23 @@ IPSW="{IPSW_FILENAME}"
 if [ -f "$IPSW" ]; then
     SIZE=$(stat -f%z "$IPSW" 2>/dev/null || stat -c%s "$IPSW" 2>/dev/null)
     if [ "$SIZE" -gt 5000000000 ]; then
-        SS_INFO:IPSW already downloaded ($SIZE bytes), skipping.
+        echo "SS_INFO:IPSW already downloaded ($SIZE bytes), skipping."
         exit 0
     else
-        SS_INFO:Existing IPSW is incomplete, redownloading...
+        echo "SS_INFO:Existing IPSW is incomplete, redownloading..."
         rm -f "$IPSW"
     fi
 fi
-SS_INFO:Downloading iOS 14.0 beta 5 firmware (~5.4 GB)...
-SS_INFO:This will take 10-30 minutes depending on your connection.
+echo "SS_INFO:Downloading iOS 14.0 beta 5 firmware (~5.4 GB)..."
+echo "SS_INFO:This will take 10-30 minutes depending on your connection."
 curl -L -o "$IPSW" --progress-bar "{IPSW_URL}"
 if [ ! -f "$IPSW" ]; then
-    SS_ERROR:Download failed.
+    echo "SS_ERROR:Download failed."
     exit 1
 fi
 SIZE=$(stat -f%z "$IPSW" 2>/dev/null || stat -c%s "$IPSW" 2>/dev/null)
-SS_INFO:Downloaded $SIZE bytes
-SS_INFO:IPSW download complete
+echo "SS_INFO:Downloaded $SIZE bytes"
+echo "SS_INFO:IPSW download complete"
 '''
 
 
@@ -208,21 +208,21 @@ def _script_extract_ipsw(platform, work_dir):
 cd "{work_dir}" || exit 1
 IPSW="{IPSW_FILENAME}"
 if [ ! -f "$IPSW" ]; then
-    SS_ERROR:IPSW not found. Download it first (step 5).
+    echo "SS_ERROR:IPSW not found. Download it first (step 5)."
     exit 1
 fi
 if [ -d "Restore" ] && [ -f "Restore/BuildManifest.plist" ]; then
-    SS_INFO:Restore directory already exists with valid content, skipping extraction.
+    echo "SS_INFO:Restore directory already exists with valid content, skipping extraction."
     exit 0
 fi
-SS_INFO:Extracting IPSW (this may take 2-5 minutes)...
+echo "SS_INFO:Extracting IPSW (this may take 2-5 minutes)..."
 rm -rf Restore
 unzip -q "$IPSW" -d Restore
 if [ ! -f "Restore/BuildManifest.plist" ]; then
-    SS_ERROR:Extraction failed or incomplete.
+    echo "SS_ERROR:Extraction failed or incomplete."
     exit 1
 fi
-SS_INFO:Firmware extracted to Restore/
+echo "SS_INFO:Firmware extracted to Restore/"
 '''
 
 
@@ -234,12 +234,12 @@ if [ ! -d "$SCRIPTS" ]; then
     SCRIPTS="./Inferno/extras/Inferno"
 fi
 if [ ! -d "$SCRIPTS" ]; then
-    SS_ERROR:Ticket scripts not found in Inferno repo.
-    SS_INFO:Expected location: Inferno/Extras/Inferno/
+    echo "SS_ERROR:Ticket scripts not found in Inferno repo."
+    echo "SS_INFO:Expected location: Inferno/Extras/Inferno/"
     exit 1
 fi
 
-SS_INFO:Setting up Python environment...
+echo "SS_INFO:Setting up Python environment..."
 if [ ! -d "inferno_tools_venv" ]; then
     python3 -m venv inferno_tools_venv || python -m venv inferno_tools_venv
 fi
@@ -248,31 +248,31 @@ pip install -q pyasn1 pyasn1-modules
 
 TICKET="$SCRIPTS/ticket.shsh2"
 if [ ! -f "$TICKET" ]; then
-    SS_ERROR:ticket.shsh2 not found in $SCRIPTS
+    echo "SS_ERROR:ticket.shsh2 not found in $SCRIPTS"
     exit 1
 fi
 
 if [ ! -f "./Restore/BuildManifest.plist" ]; then
-    SS_ERROR:BuildManifest.plist not found. Extract IPSW first (step 6).
+    echo "SS_ERROR:BuildManifest.plist not found. Extract IPSW first (step 6)."
     exit 1
 fi
 
-SS_INFO:Generating AP ticket...
+echo "SS_INFO:Generating AP ticket..."
 python3 "$SCRIPTS/create_apticket.py" n104ap ./Restore/BuildManifest.plist "$TICKET" ./root_ticket.der
 if [ ! -f "root_ticket.der" ]; then
-    SS_ERROR:AP ticket generation failed
+    echo "SS_ERROR:AP ticket generation failed"
     exit 1
 fi
-SS_INFO:Created root_ticket.der
+echo "SS_INFO:Created root_ticket.der"
 
-SS_INFO:Generating SEP ticket...
+echo "SS_INFO:Generating SEP ticket..."
 python3 "$SCRIPTS/create_septicket.py" n104ap ./Restore/BuildManifest.plist "$TICKET" ./sep_root_ticket.der
 if [ ! -f "sep_root_ticket.der" ]; then
-    SS_ERROR:SEP ticket generation failed
+    echo "SS_ERROR:SEP ticket generation failed"
     exit 1
 fi
-SS_INFO:Created sep_root_ticket.der
-SS_INFO:Tickets generated successfully
+echo "SS_INFO:Created sep_root_ticket.der"
+echo "SS_INFO:Tickets generated successfully"
 '''
 
 
@@ -281,13 +281,13 @@ def _script_build_img4lib(platform, work_dir):
         return f'''
 cd "{work_dir}" || exit 1
 if [ -f "img4lib/img4" ]; then
-    SS_INFO:img4lib already built, skipping.
+    echo "SS_INFO:img4lib already built, skipping."
     exit 0
 fi
-SS_INFO:Cloning img4lib...
+echo "SS_INFO:Cloning img4lib..."
 git clone https://github.com/xerub/img4lib
 cd img4lib || exit 1
-SS_INFO:Building img4lib...
+echo "SS_INFO:Building img4lib..."
 ARCH=$(uname -m)
 if [ "$ARCH" = "arm64" ]; then
     make LDFLAGS="-L/opt/homebrew/opt/openssl/lib -L/opt/homebrew/opt/lzfse/lib" \\
@@ -296,23 +296,23 @@ else
     make LDFLAGS="-L/usr/local/opt/openssl/lib -L/usr/local/opt/lzfse/lib" \\
          CFLAGS="-I/usr/local/opt/openssl/include -I/usr/local/opt/lzfse/include -Wall -W -pedantic -Wno-variadic-macros -Wno-multichar -Wno-four-char-constants -Wno-unused-parameter -O2 -I. -g -DiOS10 -DDER_MULTIBYTE_TAGS=1 -DER_TAG_SIZE=8"
 fi
-SS_INFO:img4lib built successfully
+echo "SS_INFO:img4lib built successfully"
 '''
     # linux / WSL
     return f'''
 cd "{work_dir}" || exit 1
 if [ -f "img4lib/img4" ]; then
-    SS_INFO:img4lib already built, skipping.
+    echo "SS_INFO:img4lib already built, skipping."
     exit 0
 fi
-SS_INFO:Cloning img4lib...
+echo "SS_INFO:Cloning img4lib..."
 git clone https://github.com/xerub/img4lib
 cd img4lib || exit 1
-SS_INFO:Installing build dependencies...
+echo "SS_INFO:Installing build dependencies..."
 sudo -n apt-get install -y libssl-dev
-SS_INFO:Building img4lib...
+echo "SS_INFO:Building img4lib..."
 make
-SS_INFO:img4lib built successfully
+echo "SS_INFO:img4lib built successfully"
 '''
 
 
@@ -323,31 +323,31 @@ def _script_fs_patches(platform, work_dir):
     return f'''
 cd "{work_dir}" || exit 1
 if [ ! -f "root" ]; then
-    SS_ERROR:Root disk image not found. Create disk images first (step 4).
+    echo "SS_ERROR:Root disk image not found. Create disk images first (step 4)."
     exit 1
 fi
-SS_INFO:Attaching root disk image...
+echo "SS_INFO:Attaching root disk image..."
 hdiutil attach -imagekey diskimage-class=CRawDiskImage -blocksize 4096 -noverify -noautofsck root
 
-SS_INFO:Enabling ownership and read-write mount...
+echo "SS_INFO:Enabling ownership and read-write mount..."
 sudo diskutil enableownership /Volumes/System
 sudo mount -urw /Volumes/System
 
 if [ ! -d "InfernoFSPatcher" ]; then
-    SS_INFO:Cloning InfernoFSPatcher...
+    echo "SS_INFO:Cloning InfernoFSPatcher..."
     git clone https://git.chefkiss.dev/AppleHax/InfernoFSPatcher
 fi
 cd InfernoFSPatcher || exit 1
-SS_INFO:Building patcher...
+echo "SS_INFO:Building patcher..."
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
-SS_INFO:Patching dyld shared cache...
+echo "SS_INFO:Patching dyld shared cache..."
 sudo build/inferno_fs_patcher /Volumes/System/System/Library/Caches/com.apple.dyld/dyld_shared_cache_arm64e
 
-SS_INFO:Ejecting disk...
+echo "SS_INFO:Ejecting disk..."
 diskutil eject /Volumes/System
-SS_INFO:Filesystem patches applied successfully
+echo "SS_INFO:Filesystem patches applied successfully"
 '''
 
 

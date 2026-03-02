@@ -100,15 +100,32 @@ else
     git clone --depth 1 https://github.com/citruz/pongoOS-QEMU.git pongoOS-src || exit 1
     cd pongoOS-src || exit 1
 fi
+
 echo "SS_INFO:Installing build dependencies..."
-if ! command -v clang >/dev/null 2>&1; then
-    echo "SS_INFO:Installing clang..."
-    if [ "$(uname)" = "Darwin" ]; then
-        xcode-select --install 2>/dev/null || true
-    else
-        sudo -n apt-get install -y clang lld || exit 1
-    fi
+if [ "$(uname)" = "Darwin" ]; then
+    xcode-select --install 2>/dev/null || true
+else
+    echo "SS_INFO:Installing clang, lld, and libc for cross-compilation..."
+    sudo -n apt-get install -y clang lld libc6-dev || exit 1
 fi
+
+# Set up Apple cross-compiler wrapper for Linux/WSL.
+# The Makefile expects 'arm64-apple-ios12.0.0-clang' which is just
+# clang invoked with --target=arm64-apple-ios12.0.0.
+if [ "$(uname)" != "Darwin" ]; then
+    echo "SS_INFO:Setting up Apple cross-compiler wrapper..."
+    WRAPPER_DIR="{work_dir}/cross-tools"
+    mkdir -p "$WRAPPER_DIR"
+    # Find clang's builtin resource dir (provides stdarg.h, etc.)
+    RESOURCE_DIR=$(clang -print-resource-dir 2>/dev/null)
+    # Use printf to avoid heredoc escaping issues inside Python f-strings
+    printf '#!/bin/bash\\nexec clang --target=arm64-apple-ios12.0.0 -fuse-ld=lld -isystem "%s/include" -Wno-error=unused-but-set-variable -Wno-error=implicit-function-declaration "$@"\\n' "$RESOURCE_DIR" > "$WRAPPER_DIR/arm64-apple-ios12.0.0-clang"
+    chmod +x "$WRAPPER_DIR/arm64-apple-ios12.0.0-clang"
+    export PATH="$WRAPPER_DIR:$PATH"
+    echo "SS_INFO:Cross-compiler wrapper created at $WRAPPER_DIR"
+    echo "SS_INFO:Clang resource dir: $RESOURCE_DIR"
+fi
+
 echo "SS_INFO:Building pongoOS (this may take a few minutes)..."
 make clean || true
 make || exit 1

@@ -555,7 +555,7 @@ class App(ctk.CTk):
     def _check_for_updates(self):
         """Check for updates from GitHub releases."""
         if GITHUB_OWNER == "YOUR_USERNAME":
-            self._log_panel.log("warn", "Update check skipped - GitHub repo not configured")
+            self._log_panel.log("warning", "Update check skipped - GitHub repo not configured")
             return
 
         def on_update_result(update_available: bool, release_info: dict):

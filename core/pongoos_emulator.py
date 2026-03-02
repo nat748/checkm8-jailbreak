@@ -121,7 +121,7 @@ class PongoOSEmulator:
             try:
                 self._process.stdin.write(b"\x01x")  # Ctrl+A X (QEMU quit)
                 self._process.stdin.flush()
-            except:
+            except (OSError, BrokenPipeError):
                 pass
 
             # Wait for graceful shutdown
@@ -207,7 +207,7 @@ class PongoOSEmulator:
                     text = line.decode('utf-8', errors='replace').strip()
                     if text:
                         self._log("info", f"[pongoOS] {text}")
-                except:
+                except (UnicodeDecodeError, AttributeError, OSError):
                     pass
 
         except Exception as e:
