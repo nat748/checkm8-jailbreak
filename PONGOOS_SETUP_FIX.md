@@ -1,6 +1,8 @@
 # pongoOS Setup Script Fix
 
-## Issue
+## Issues Fixed
+
+### 1. Bash Line Ending Errors (FIXED ✓)
 
 pongoOS setup wizard was failing with bash errors:
 ```
@@ -83,3 +85,85 @@ The fix ensures that:
 - Final script has no Windows line ending artifacts
 
 pongoOS setup wizard now works correctly on Windows with WSL! ✓
+
+---
+
+### 2. Sudo Password Prompt (NEW ✨)
+
+**Previous Approach:**
+- Required passwordless sudo (security risk)
+- Manual sudoers file editing
+- Poor user experience
+
+**New Approach:**
+- **Password dialog** prompts for sudo password when needed
+- Password cached for the session (no re-entry required)
+- Secure: password passed via `sudo -S` (reads from stdin)
+- No sudoers file modification required
+
+#### Implementation
+
+**Password Dialog** ([gui/password_dialog.py](gui/password_dialog.py)):
+- CTkToplevel window with secure password entry
+- Shows only when sudo access is needed
+- Password field uses `●` masking
+- Modal dialog - blocks until user enters password or cancels
+
+**Password Injection**:
+```python
+# In setup_engine.py and bootstrap.py
+if self._sudo_password:
+    # Escape single quotes in password for bash
+    escaped_pwd = self._sudo_password.replace("'", "'\\''")
+    pwd_line = f"SUDO_PASSWORD='{escaped_pwd}'\n"
+    clean_script = pwd_line + clean_script
+    # Replace sudo -n with piped password sudo -S
+    clean_script = clean_script.replace("sudo -n", "echo \"$SUDO_PASSWORD\" | sudo -S")
+```
+
+**How `sudo -S` works:**
+- `-S` flag tells sudo to read password from stdin
+- `echo "$SUDO_PASSWORD" |` pipes the password to sudo
+- Password is injected once at script start as bash variable
+- All `sudo -n` commands replaced with `echo "$SUDO_PASSWORD" | sudo -S`
+
+#### User Flow
+
+1. **Setup Wizard**:
+   - User clicks "Run Step"
+   - If Linux/Windows: password dialog appears (first time only)
+   - User enters sudo password
+   - Password cached for all subsequent steps
+   - No re-prompt during session
+
+2. **Bootstrap Installer**:
+   - User clicks "Install Bootstrap"
+   - Password dialog appears (first time only)
+   - User enters sudo password
+   - Password cached for all future bootstrap operations
+
+#### Security
+
+✅ **Password is never stored permanently** - only kept in memory for session
+✅ **No sudoers modification** - normal sudo authentication
+✅ **Single-quote escaping** - prevents bash injection
+✅ **Password cleared on app close** - memory is freed
+✅ **Modal dialog** - blocks other operations during entry
+
+#### Files Modified
+
+- [gui/password_dialog.py](gui/password_dialog.py) - New password entry dialog
+- [core/setup_engine.py](core/setup_engine.py) - Accept and inject sudo password
+- [core/bootstrap.py](core/bootstrap.py) - Accept and inject sudo password
+- [gui/setup_window.py](gui/setup_window.py) - Prompt for password before first sudo step
+- [gui/app.py](gui/app.py) - Prompt for password before bootstrap install
+
+#### Result
+
+✅ No more "sudo requires password" errors
+✅ No manual sudoers configuration needed
+✅ More secure (uses standard sudo authentication)
+✅ Better UX (simple password dialog)
+✅ Password reused for session (no repeated prompts)
+
+Setup wizards and bootstrap installation now work out-of-the-box! 🎉

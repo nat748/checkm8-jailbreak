@@ -20,12 +20,13 @@ from config.pongoos_setup import get_script_for_step as get_pongoos_script
 class SetupEngine:
     """Runs individual setup steps with progress and log reporting."""
 
-    def __init__(self, platform, work_dir, emulator_type="inferno", log_callback=None, step_callback=None):
+    def __init__(self, platform, work_dir, emulator_type="inferno", sudo_password=None, log_callback=None, step_callback=None):
         """
         Args:
             platform: 'windows', 'macos', 'macos-arm64', or 'linux'
             work_dir: absolute path for emulator files (WSL path on Windows)
             emulator_type: 'inferno' or 'pongoos'
+            sudo_password: password for sudo operations (None = will prompt)
             log_callback: fn(level, message)
             step_callback: fn(step_id, status)  — status is
                            'running', 'done', 'failed'
@@ -33,10 +34,15 @@ class SetupEngine:
         self._platform = platform
         self._work_dir = work_dir
         self._emulator_type = emulator_type
+        self._sudo_password = sudo_password
         self._log_cb = log_callback or (lambda *a: None)
         self._step_cb = step_callback or (lambda *a: None)
         self._cancel_event = threading.Event()
         self._process = None
+
+    def set_sudo_password(self, password):
+        """Set the sudo password for subsequent operations."""
+        self._sudo_password = password
 
     def cancel(self):
         self._cancel_event.set()
@@ -92,6 +98,15 @@ class SetupEngine:
             # Remove any trailing whitespace from each line
             clean_script = "\n".join(line.rstrip() for line in clean_script.split("\n"))
 
+            # Inject sudo password if provided
+            if self._sudo_password:
+                # Escape single quotes in password for bash
+                escaped_pwd = self._sudo_password.replace("'", "'\\''")
+                pwd_line = f"SUDO_PASSWORD='{escaped_pwd}'\n"
+                clean_script = pwd_line + clean_script
+                # Replace sudo -n with piped password sudo -S
+                clean_script = clean_script.replace("sudo -n", "echo \"$SUDO_PASSWORD\" | sudo -S")
+
             # Add error handling (with Unix line endings only)
             clean_script = "set -e\nset -o pipefail\n" + clean_script
 
@@ -106,8 +121,9 @@ class SetupEngine:
                 text=True,
                 bufsize=1,
             )
-            self._process.stdin.write(clean_script)
-            self._process.stdin.flush()
+            # Final replace right before writing - text mode on Windows
+            # will convert \n to \r\n, so strip any \r that got added
+            self._process.stdin.write(clean_script.replace('\r', ''))
             self._process.stdin.close()
 
             while True:

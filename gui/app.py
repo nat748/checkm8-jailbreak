@@ -49,6 +49,7 @@ from gui.update_dialog import show_update_dialog
 from gui.pongoos_panel import PongoOSPanel
 from gui.pongoos_console import PongoOSConsole
 from gui.package_manager_dialog import PackageManagerDialog
+from gui.password_dialog import PasswordDialog
 from core.updater import check_for_updates_async
 from core.pongoos_emulator import PongoOSEmulator
 
@@ -77,6 +78,7 @@ class App(ctk.CTk):
         self._update_dialog = None
         self._pongoos = None
         self._pongoos_console = None
+        self._sudo_password = None  # Cached sudo password for bootstrap
         self._log_queue = queue.Queue()
         self._progress_queue = queue.Queue()
 
@@ -481,12 +483,22 @@ class App(ctk.CTk):
             # User cancelled
             return
 
+        # Prompt for sudo password if not already set
+        if not self._sudo_password:
+            pwd_dialog = PasswordDialog(self)
+            password = pwd_dialog.get_password()
+            if not password:
+                # User cancelled
+                return
+            self._sudo_password = password
+
         self._emulator_panel.set_bootstrap_running(pkg_choice)
         self._log_panel.log_separator()
         self._log_panel.log("info", f"Installing {pkg_choice.capitalize()} package manager...")
 
         self._bootstrap_installer = BootstrapInstaller(
             package_manager=pkg_choice,
+            sudo_password=self._sudo_password,
             log_callback=self._log_t,
             progress_callback=self._progress_t,
         )

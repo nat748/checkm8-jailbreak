@@ -34,6 +34,7 @@ from config.constants import (
 from config.setup_steps import detect_platform, get_steps_for_platform, SETUP_STEPS
 from config.pongoos_setup import PONGOOS_STEPS, get_steps_for_platform as get_pongoos_steps
 from core.setup_engine import SetupEngine
+from gui.password_dialog import PasswordDialog
 
 _STATUS_SYMBOLS = {
     "pending": "\u25cb",   # ○
@@ -88,6 +89,7 @@ class SetupWindow(ctk.CTkToplevel):
         self._log_queue = queue.Queue()
         self._step_queue = queue.Queue()
         self._work_dir = ""
+        self._sudo_password = None  # Cached sudo password for session
 
         self._build_ui()
         self._load_emulator_steps(emulator_type)
@@ -416,6 +418,15 @@ class SetupWindow(ctk.CTkToplevel):
         if not step or not step.get("automated"):
             return
 
+        # Prompt for sudo password if not already set (Linux/Windows only)
+        if self._platform in ("linux", "windows") and not self._sudo_password:
+            dialog = PasswordDialog(self)
+            password = dialog.get_password()
+            if not password:
+                # User cancelled
+                return
+            self._sudo_password = password
+
         # Read work dir from entry
         self._work_dir = self._dir_entry.get().strip() or self._work_dir
 
@@ -432,6 +443,7 @@ class SetupWindow(ctk.CTkToplevel):
         self._engine = SetupEngine(
             self._platform, self._work_dir,
             emulator_type=self._emulator_type,
+            sudo_password=self._sudo_password,
             log_callback=self._log_t,
             step_callback=self._step_t,
         )

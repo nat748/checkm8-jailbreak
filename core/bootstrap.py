@@ -284,12 +284,17 @@ class BootstrapInstaller:
         "done": ("Complete", 100),
     }
 
-    def __init__(self, package_manager="sileo", log_callback=None, progress_callback=None):
+    def __init__(self, package_manager="sileo", sudo_password=None, log_callback=None, progress_callback=None):
         self._package_manager = package_manager
+        self._sudo_password = sudo_password
         self._log_cb = log_callback or (lambda *a: None)
         self._progress_cb = progress_callback or (lambda *a: None)
         self._cancel_event = threading.Event()
         self._process = None
+
+    def set_sudo_password(self, password):
+        """Set the sudo password for bootstrap installation."""
+        self._sudo_password = password
 
     def cancel(self):
         self._cancel_event.set()
@@ -311,6 +316,15 @@ class BootstrapInstaller:
             script = _BOOTSTRAP_SCRIPT
             script = script.replace("__ZEBRA_URL__", _PKG_URLS["zebra"])
             script = script.replace("__CYDIA_URL__", _PKG_URLS["cydia"])
+
+            # Inject sudo password if provided
+            if self._sudo_password:
+                # Escape single quotes in password for bash
+                escaped_pwd = self._sudo_password.replace("'", "'\\''")
+                pwd_line = f"SUDO_PASSWORD='{escaped_pwd}'\n"
+                script = pwd_line + script
+                # Replace sudo -n with piped password sudo -S
+                script = script.replace("sudo -n", "echo \"$SUDO_PASSWORD\" | sudo -S")
 
             # Pipe the script via stdin to avoid Windows command-line
             # quoting mangling the double quotes and $variables.
