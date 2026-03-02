@@ -8,7 +8,7 @@ import customtkinter as ctk
 import webbrowser
 from typing import Optional
 from config.constants import (
-    COLOR_BG_DARK, COLOR_GLASS_LIGHT, COLOR_GLASS_BORDER,
+    COLOR_BG, COLOR_GLASS_LIGHT, COLOR_GLASS_BORDER,
     COLOR_TEXT_BRIGHT, COLOR_TEXT_DIM, COLOR_ACCENT
 )
 
@@ -44,7 +44,7 @@ class UpdateDialog(ctk.CTkToplevel):
         self.grab_set()
 
         # Styling
-        self.configure(fg_color=COLOR_BG_DARK)
+        self.configure(fg_color=COLOR_BG)
 
         self._build_ui()
 
@@ -92,7 +92,7 @@ class UpdateDialog(ctk.CTkToplevel):
             container,
             width=440,
             height=180,
-            fg_color=COLOR_BG_DARK,
+            fg_color=COLOR_BG,
             border_width=1,
             border_color=COLOR_GLASS_BORDER,
             corner_radius=8,

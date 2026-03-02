@@ -8,7 +8,7 @@ import customtkinter as ctk
 from typing import Optional
 
 from config.constants import (
-    COLOR_BG_DARK,
+    COLOR_BG,
     COLOR_GLASS,
     COLOR_GLASS_LIGHT,
     COLOR_GLASS_BORDER,
@@ -39,7 +39,7 @@ class PongoOSConsole(ctk.CTkToplevel):
         self.title("pongoOS Console")
         self.geometry("700x500")
         self.minsize(500, 300)
-        self.configure(fg_color=COLOR_BG_DARK)
+        self.configure(fg_color=COLOR_BG)
 
         # Make it float on top
         self.attributes('-topmost', False)
@@ -81,7 +81,7 @@ class PongoOSConsole(ctk.CTkToplevel):
         # Console output area (scrollable textbox)
         self._console = ctk.CTkTextbox(
             container,
-            fg_color=COLOR_BG_DARK,
+            fg_color=COLOR_BG,
             border_width=1,
             border_color=COLOR_GLASS_BORDER,
             corner_radius=8,
