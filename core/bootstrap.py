@@ -1,8 +1,9 @@
 """
 Checkra1n bootstrap installer for Inferno emulator.
 
-Installs the checkra1n bootstrap (Sileo package manager and base
-utilities) onto the Inferno root disk image via WSL commands.
+Installs the checkra1n bootstrap (base APT system) and selected
+package manager (Sileo/Zebra/Cydia) onto the Inferno root disk image
+via WSL commands.
 
 The emulator MUST be stopped before running this — the root disk
 image cannot be modified while QEMU has it open.
@@ -13,17 +14,29 @@ import threading
 
 from config.emulator_config import WSL_DISTRO
 
+# Package manager download URLs
+_PKG_URLS = {
+    "sileo": None,  # Included in checkra1n bootstrap
+    "zebra": "https://getzbra.com/repo/dists/stable/main/binary-iphoneos-arm/getzbra_1.1.28_iphoneos-arm.deb",
+    "cydia": "https://apt.bingner.com/debs/1443.00/cydia_1.1.36_iphoneos-arm.deb",
+}
+
 # Bash script that runs inside WSL Ubuntu to install the bootstrap.
 # Uses structured output prefixes so the Python side can parse progress.
+# $1 = package manager choice ("sileo", "zebra", or "cydia")
 _BOOTSTRAP_SCRIPT = r'''
 log_info()  { echo "BS_INFO:$1"; }
 log_warn()  { echo "BS_WARN:$1"; }
 log_error() { echo "BS_ERROR:$1"; }
 log_step()  { echo "BS_STEP:$1"; }
 
+PKG_MANAGER="$1"
+[ -z "$PKG_MANAGER" ] && PKG_MANAGER="sileo"
+
 ROOT_IMAGE="$HOME/root"
 MOUNT_POINT="/mnt/ios_bootstrap"
 STRAP_FILE="/tmp/strap.tar.lzma"
+PKG_FILE="/tmp/package_manager.deb"
 
 # ---- Check sudo (no TTY available, must be passwordless) ----
 log_step "checking_tools"
@@ -197,6 +210,40 @@ else
     log_warn "launchd plist not found at expected path — skipping"
 fi
 
+# ---- Install package manager ----
+log_step "package_manager"
+
+case "$PKG_MANAGER" in
+    sileo)
+        log_info "Using Sileo (included in checkra1n bootstrap)"
+        ;;
+    zebra)
+        log_info "Installing Zebra package manager..."
+        PKG_URL="__ZEBRA_URL__"
+        if curl -L -o "$PKG_FILE" "$PKG_URL" 2>/dev/null; then
+            sudo -n dpkg-deb -x "$PKG_FILE" "$MOUNT_POINT" 2>/dev/null || log_warn "Failed to extract Zebra .deb"
+            log_info "Zebra installed"
+            rm -f "$PKG_FILE"
+        else
+            log_warn "Failed to download Zebra, falling back to Sileo"
+        fi
+        ;;
+    cydia)
+        log_info "Installing Cydia package manager..."
+        PKG_URL="__CYDIA_URL__"
+        if curl -L -o "$PKG_FILE" "$PKG_URL" 2>/dev/null; then
+            sudo -n dpkg-deb -x "$PKG_FILE" "$MOUNT_POINT" 2>/dev/null || log_warn "Failed to extract Cydia .deb"
+            log_info "Cydia installed"
+            rm -f "$PKG_FILE"
+        else
+            log_warn "Failed to download Cydia, falling back to Sileo"
+        fi
+        ;;
+    *)
+        log_warn "Unknown package manager '$PKG_MANAGER', using Sileo"
+        ;;
+esac
+
 # ---- Cleanup ----
 log_step "cleanup"
 
@@ -209,7 +256,17 @@ rm -f "$STRAP_FILE"
 
 log_step "done"
 log_info "Checkra1n bootstrap installed!"
-log_info "Sileo will be available after relaunching the emulator."
+case "$PKG_MANAGER" in
+    sileo)
+        log_info "Sileo will be available after relaunching the emulator."
+        ;;
+    zebra)
+        log_info "Zebra will be available after relaunching the emulator."
+        ;;
+    cydia)
+        log_info "Cydia will be available after relaunching the emulator."
+        ;;
+esac
 '''
 
 
@@ -220,13 +277,15 @@ class BootstrapInstaller:
         "checking_tools": ("Checking tools", 5),
         "downloading": ("Downloading bootstrap", 15),
         "mounting": ("Mounting disk image", 35),
-        "extracting": ("Extracting files", 60),
-        "configuring": ("Configuring system", 80),
-        "cleanup": ("Cleaning up", 90),
+        "extracting": ("Extracting files", 55),
+        "configuring": ("Configuring system", 70),
+        "package_manager": ("Installing package manager", 85),
+        "cleanup": ("Cleaning up", 95),
         "done": ("Complete", 100),
     }
 
-    def __init__(self, log_callback=None, progress_callback=None):
+    def __init__(self, package_manager="sileo", log_callback=None, progress_callback=None):
+        self._package_manager = package_manager
         self._log_cb = log_callback or (lambda *a: None)
         self._progress_cb = progress_callback or (lambda *a: None)
         self._cancel_event = threading.Event()
@@ -243,13 +302,19 @@ class BootstrapInstaller:
     def install(self):
         """Run the bootstrap installation. Call from a background thread."""
         self._cancel_event.clear()
-        self._log("info", "Starting checkra1n bootstrap installation...")
+        pkg_name = self._package_manager.capitalize()
+        self._log("info", f"Starting checkra1n bootstrap installation with {pkg_name}...")
         self._progress("Preparing", 0)
 
         try:
+            # Substitute URLs in script
+            script = _BOOTSTRAP_SCRIPT
+            script = script.replace("__ZEBRA_URL__", _PKG_URLS["zebra"])
+            script = script.replace("__CYDIA_URL__", _PKG_URLS["cydia"])
+
             # Pipe the script via stdin to avoid Windows command-line
             # quoting mangling the double quotes and $variables.
-            wsl_cmd = ["wsl", "-d", WSL_DISTRO, "--", "bash"]
+            wsl_cmd = ["wsl", "-d", WSL_DISTRO, "--", "bash", "-s", self._package_manager]
 
             self._process = subprocess.Popen(
                 wsl_cmd,
@@ -259,7 +324,7 @@ class BootstrapInstaller:
                 text=True,
                 bufsize=1,
             )
-            self._process.stdin.write(_BOOTSTRAP_SCRIPT.replace('\r', ''))
+            self._process.stdin.write(script.replace('\r', ''))
             self._process.stdin.close()
 
             # Use readline() — the file iterator (for line in ...) has an
@@ -296,8 +361,9 @@ class BootstrapInstaller:
             self._process = None
 
             if exit_code == 0:
+                pkg_name = self._package_manager.capitalize()
                 self._log("success", "Bootstrap installation complete!")
-                self._log("info", "Sileo will be available after relaunching the emulator.")
+                self._log("info", f"{pkg_name} will be available after relaunching the emulator.")
                 self._progress("Complete", 100)
                 return True
             else:

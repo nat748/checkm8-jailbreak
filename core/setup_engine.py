@@ -71,7 +71,13 @@ class SetupEngine:
             if self._platform == "windows":
                 cmd = ["wsl", "-d", WSL_DISTRO, "--", "bash"]
             else:
-                cmd = ["bash"]
+                cmd = ["bash", "-e"]  # Exit on error
+
+            # Clean script - remove Windows line endings and ensure proper formatting
+            clean_script = script.replace("\r\n", "\n").replace("\r", "\n")
+
+            # Add error handling
+            clean_script = "set -e\nset -o pipefail\n" + clean_script
 
             self._process = subprocess.Popen(
                 cmd,
@@ -81,7 +87,8 @@ class SetupEngine:
                 text=True,
                 bufsize=1,
             )
-            self._process.stdin.write(script.replace("\r", ""))
+            self._process.stdin.write(clean_script)
+            self._process.stdin.flush()
             self._process.stdin.close()
 
             while True:

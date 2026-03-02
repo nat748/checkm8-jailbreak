@@ -18,12 +18,20 @@ IPSW_FILENAME = "iPhone11,8,iPhone12,1_14.0_18A5351d_Restore.ipsw"
 
 
 def detect_platform():
-    """Return 'windows', 'macos', or 'linux'."""
+    """Return 'windows', 'macos', 'macos-arm64', or 'linux'."""
     if sys.platform == "win32":
         return "windows"
     if sys.platform == "darwin":
+        import platform
+        if platform.machine() == "arm64":
+            return "macos-arm64"
         return "macos"
     return "linux"
+
+
+def is_macos(platform):
+    """Check if platform is any macOS variant."""
+    return platform in ("macos", "macos-arm64")
 
 
 # ── Script generators ──────────────────────────────────────────────
@@ -32,48 +40,42 @@ def detect_platform():
 # absolute path where all Inferno files live (inside WSL on Windows).
 
 def _script_install_deps(platform, work_dir):
-    if platform == "macos":
-        return '''
-SS_INFO:Checking for Homebrew...
+    if is_macos(platform):
+        arch_note = "ARM64 (Apple Silicon)" if platform == "macos-arm64" else "x86_64 (Intel)"
+        return f'''
+echo "SS_INFO:Detected macOS {arch_note}"
+echo "SS_INFO:Checking for Homebrew..."
 if ! command -v brew >/dev/null 2>&1; then
-    SS_ERROR:Homebrew not found. Install from https://brew.sh first.
+    echo "SS_ERROR:Homebrew not found. Install from https://brew.sh first."
     exit 1
 fi
-SS_INFO:Installing dependencies via Homebrew...
-brew install libtool meson ninja pkgconf capstone dtc glib gnutls \\
-    jpeg-turbo libpng libslirp libssh libusb lzo ncurses pixman \\
-    snappy vde zstd libtasn1
-SS_INFO:Dependencies installed
+echo "SS_INFO:Installing dependencies via Homebrew..."
+brew install libtool meson ninja pkgconf capstone dtc glib gnutls jpeg-turbo libpng libslirp libssh libusb lzo ncurses pixman snappy vde zstd libtasn1 || exit 1
+echo "SS_INFO:Dependencies installed"
 '''
     # linux / windows (WSL Ubuntu)
     return '''
-SS_INFO:Checking sudo access...
+echo "SS_INFO:Checking sudo access..."
 if ! sudo -n true 2>/dev/null; then
-    SS_ERROR:sudo requires a password. Set up passwordless sudo first:
-    SS_INFO:  echo "$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/$USER
+    echo "SS_ERROR:sudo requires a password. Set up passwordless sudo first:"
+    echo 'SS_INFO:  echo "$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/$USER'
     exit 1
 fi
-SS_INFO:Updating package lists...
-sudo -n apt-get update
-SS_INFO:Installing build dependencies...
-sudo -n apt-get install -y \\
-    build-essential git libtool meson ninja-build pkg-config \\
-    libcapstone-dev device-tree-compiler libglib2.0-dev gnutls-bin \\
-    libjpeg-dev libpng-dev libslirp-dev libssh-dev \\
-    libusb-1.0-0-dev liblzo2-dev libncurses-dev libpixman-1-dev \\
-    libsnappy-dev vde2 zstd libgnutls28-dev \\
-    libgtk-3-dev libsdl2-dev
-SS_INFO:Building lzfse from source...
+echo "SS_INFO:Updating package lists..."
+sudo -n apt-get update || exit 1
+echo "SS_INFO:Installing build dependencies..."
+sudo -n apt-get install -y build-essential git libtool meson ninja-build pkg-config libcapstone-dev device-tree-compiler libglib2.0-dev gnutls-bin libjpeg-dev libpng-dev libslirp-dev libssh-dev libusb-1.0-0-dev liblzo2-dev libncurses-dev libpixman-1-dev libsnappy-dev vde2 zstd libgnutls28-dev libgtk-3-dev libsdl2-dev || exit 1
+echo "SS_INFO:Building lzfse from source..."
 if [ ! -d "/tmp/lzfse" ]; then
-    cd /tmp
-    git clone https://github.com/lzfse/lzfse
-    cd lzfse
-    mkdir -p build && cd build
-    cmake .. && make
-    sudo make install
-    sudo ldconfig
+    cd /tmp || exit 1
+    git clone https://github.com/lzfse/lzfse || exit 1
+    cd lzfse || exit 1
+    mkdir -p build && cd build || exit 1
+    cmake .. && make || exit 1
+    sudo make install || exit 1
+    sudo ldconfig || exit 1
 fi
-SS_INFO:Dependencies installed
+echo "SS_INFO:Dependencies installed"
 '''
 
 
@@ -97,7 +99,7 @@ SS_INFO:Inferno repository ready
 
 
 def _script_build_inferno(platform, work_dir):
-    if platform == "macos":
+    if is_macos(platform):
         # Detect arm64 vs x86_64
         return f'''
 cd "{work_dir}/Inferno" || exit 1
@@ -275,7 +277,7 @@ SS_INFO:Tickets generated successfully
 
 
 def _script_build_img4lib(platform, work_dir):
-    if platform == "macos":
+    if is_macos(platform):
         return f'''
 cd "{work_dir}" || exit 1
 if [ -f "img4lib/img4" ]; then
@@ -316,7 +318,7 @@ SS_INFO:img4lib built successfully
 
 def _script_fs_patches(platform, work_dir):
     """macOS only — filesystem patches using hdiutil."""
-    if platform != "macos":
+    if not is_macos(platform):
         return None
     return f'''
 cd "{work_dir}" || exit 1
@@ -356,7 +358,7 @@ SETUP_STEPS = [
         "id": "install_deps",
         "name": "Install Dependencies",
         "description": "Install build tools and libraries required to compile Inferno.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
         "script_fn": _script_install_deps,
     },
@@ -364,7 +366,7 @@ SETUP_STEPS = [
         "id": "clone_inferno",
         "name": "Clone Inferno",
         "description": "Clone the Inferno QEMU fork and initialize submodules.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
         "script_fn": _script_clone_inferno,
     },
@@ -372,7 +374,7 @@ SETUP_STEPS = [
         "id": "build_inferno",
         "name": "Build Inferno",
         "description": "Configure and compile Inferno from source. This may take 10-20 minutes.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
         "script_fn": _script_build_inferno,
     },
@@ -380,7 +382,7 @@ SETUP_STEPS = [
         "id": "create_disks",
         "name": "Create Disk Images",
         "description": "Create the 9 raw disk images required by the emulator.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
         "script_fn": _script_create_disks,
     },
@@ -388,7 +390,7 @@ SETUP_STEPS = [
         "id": "download_ipsw",
         "name": "Download iOS Firmware",
         "description": "Download the iOS 14.0 beta 5 IPSW from Apple (~5.4 GB).",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
         "script_fn": _script_download_ipsw,
     },
@@ -396,7 +398,7 @@ SETUP_STEPS = [
         "id": "extract_ipsw",
         "name": "Extract Firmware",
         "description": "Extract the downloaded IPSW archive.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
         "script_fn": _script_extract_ipsw,
     },
@@ -404,7 +406,7 @@ SETUP_STEPS = [
         "id": "generate_tickets",
         "name": "Generate Tickets",
         "description": "Generate AP and SEP tickets using scripts from the Inferno repo.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
         "script_fn": _script_generate_tickets,
     },
@@ -412,7 +414,7 @@ SETUP_STEPS = [
         "id": "build_img4lib",
         "name": "Build img4lib",
         "description": "Clone and build img4lib (needed for SEP firmware processing).",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
         "script_fn": _script_build_img4lib,
     },
@@ -420,7 +422,7 @@ SETUP_STEPS = [
         "id": "extract_sep",
         "name": "Extract SEP Firmware",
         "description": "Extract and re-sign SEP firmware using img4lib.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": False,
         "manual_instructions": (
             "This step requires SEP encryption keys that cannot be distributed.\n\n"
@@ -438,7 +440,7 @@ SETUP_STEPS = [
         "id": "companion_vm",
         "name": "Setup Companion VM",
         "description": "Set up a lightweight Linux VM for iOS restore and USB bridging.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": False,
         "manual_instructions": (
             "A companion VM (Arch or Artix Linux) is needed to run\n"
@@ -456,7 +458,7 @@ SETUP_STEPS = [
         "id": "restore_ios",
         "name": "Restore iOS",
         "description": "Run idevicerestore from the companion VM to install iOS.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": False,
         "manual_instructions": (
             "1. Start the companion VM FIRST\n"
@@ -475,7 +477,7 @@ SETUP_STEPS = [
         "id": "fs_patches",
         "name": "Filesystem Patches",
         "description": "Patch the dyld shared cache for software rendering (macOS only).",
-        "platforms": ["macos"],
+        "platforms": ["macos", "macos-arm64"],
         "automated": True,
         "script_fn": _script_fs_patches,
         "manual_instructions": (
@@ -490,7 +492,7 @@ SETUP_STEPS = [
         "id": "install_bootstrap",
         "name": "Install Bootstrap",
         "description": "Install the checkra1n bootstrap (Sileo + bash) onto the root disk.",
-        "platforms": ["windows", "linux", "macos"],
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": False,
         "manual_instructions": (
             "Use the 'Install Sileo' button in the main window's\n"

@@ -94,7 +94,7 @@ class EmulatorPanel(ctk.CTkFrame):
         row2.pack(fill="x", padx=20, pady=(2, 14))
 
         self._bootstrap_btn = ctk.CTkButton(
-            row2, text="Install Sileo",
+            row2, text="Install Bootstrap",
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color=COLOR_GLASS_LIGHT, hover_color=COLOR_ACCENT_HOVER,
             text_color=COLOR_TEXT_DIM,
@@ -102,6 +102,7 @@ class EmulatorPanel(ctk.CTkFrame):
             command=lambda: on_bootstrap and on_bootstrap(),
         )
         self._bootstrap_btn.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self._bootstrap_pkg_name = None  # Track chosen package manager
 
         self._setup_btn = ctk.CTkButton(
             row2, text="Setup Wizard",
@@ -143,20 +144,22 @@ class EmulatorPanel(ctk.CTkFrame):
         self._stop_btn.configure(state="disabled")
         self._bootstrap_btn.configure(state="normal")
 
-    def set_bootstrap_running(self):
+    def set_bootstrap_running(self, package_manager="sileo"):
+        self._bootstrap_pkg_name = package_manager.capitalize()
         self._bootstrap_btn.configure(
-            state="disabled", text="Installing Sileo...",
+            state="disabled", text=f"Installing {self._bootstrap_pkg_name}...",
             fg_color=COLOR_WARNING, text_color=COLOR_TEXT_BRIGHT,
         )
 
     def set_bootstrap_done(self, success=True):
+        pkg_name = self._bootstrap_pkg_name or "Bootstrap"
         if success:
             self._bootstrap_btn.configure(
-                state="normal", text="Sileo Installed",
+                state="normal", text=f"{pkg_name} Installed",
                 fg_color=COLOR_SUCCESS, text_color="#050510",
             )
         else:
             self._bootstrap_btn.configure(
-                state="normal", text="Install Sileo (Retry)",
+                state="normal", text=f"Install {pkg_name} (Retry)",
                 fg_color=COLOR_GLASS_LIGHT, text_color=COLOR_TEXT_DIM,
             )

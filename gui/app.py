@@ -45,7 +45,11 @@ from gui.log_panel import LogPanel
 from gui.setup_window import SetupWindow
 from gui.about_window import AboutWindow
 from gui.update_dialog import show_update_dialog
+from gui.pongoos_panel import PongoOSPanel
+from gui.pongoos_console import PongoOSConsole
+from gui.package_manager_dialog import PackageManagerDialog
 from core.updater import check_for_updates_async
+from core.pongoos_emulator import PongoOSEmulator
 
 
 class App(ctk.CTk):
@@ -70,6 +74,8 @@ class App(ctk.CTk):
         self._setup_window = None
         self._about_window = None
         self._update_dialog = None
+        self._pongoos = None
+        self._pongoos_console = None
         self._log_queue = queue.Queue()
         self._progress_queue = queue.Queue()
 
@@ -118,9 +124,10 @@ class App(ctk.CTk):
         ver.pack(side="right", padx=6)
 
         # Left column panel heights (920px window → ~840px available)
-        DEV_H = 0.24
-        EXP_H = 0.25
-        EMU_H = 0.22
+        DEV_H = 0.22
+        EXP_H = 0.23
+        EMU_H = 0.20
+        PONGO_H = 0.18
 
         # Device panel
         self._device_panel = DevicePanel(self, on_detect=self._on_detect_clicked)
@@ -141,7 +148,7 @@ class App(ctk.CTk):
             relwidth=LEFT_W, relheight=EXP_H,
         )
 
-        # Emulator panel
+        # Inferno Emulator panel
         self._emulator_panel = EmulatorPanel(
             self,
             on_launch=self._on_emulator_launch,
@@ -155,9 +162,23 @@ class App(ctk.CTk):
             relwidth=LEFT_W, relheight=EMU_H,
         )
 
-        # DFU guide card
+        # pongoOS Emulator panel
+        self._pongoos_panel = PongoOSPanel(
+            self,
+            on_launch=self._on_pongoos_launch,
+            on_stop=self._on_pongoos_stop,
+            on_setup=self._on_pongoos_setup,
+            on_console=self._on_pongoos_console,
+        )
+        pongo_top = emu_top + EMU_H + G
+        self._pongoos_panel.place(
+            relx=M, rely=pongo_top,
+            relwidth=LEFT_W, relheight=PONGO_H,
+        )
+
+        # DFU guide card (smaller now)
         self._dfu_card = self._make_dfu_card()
-        dfu_top = emu_top + EMU_H + G
+        dfu_top = pongo_top + PONGO_H + G
         self._dfu_card.place(
             relx=M, rely=dfu_top,
             relwidth=LEFT_W, relheight=1 - dfu_top - M,
@@ -174,7 +195,7 @@ class App(ctk.CTk):
 
         # Lift all panels above the canvas
         for w in (self._header, self._device_panel, self._exploit_panel,
-                  self._emulator_panel, self._dfu_card, self._log_panel):
+                  self._emulator_panel, self._pongoos_panel, self._dfu_card, self._log_panel):
             w.lift()
 
         # Start
@@ -439,10 +460,20 @@ class App(ctk.CTk):
             )
             return
 
-        self._emulator_panel.set_bootstrap_running()
+        # Show package manager selection dialog
+        dialog = PackageManagerDialog(self)
+        pkg_choice = dialog.get_selection()
+
+        if pkg_choice is None:
+            # User cancelled
+            return
+
+        self._emulator_panel.set_bootstrap_running(pkg_choice)
         self._log_panel.log_separator()
+        self._log_panel.log("info", f"Installing {pkg_choice.capitalize()} package manager...")
 
         self._bootstrap_installer = BootstrapInstaller(
+            package_manager=pkg_choice,
             log_callback=self._log_t,
             progress_callback=self._progress_t,
         )
@@ -494,3 +525,84 @@ class App(ctk.CTk):
 
         self._update_dialog = show_update_dialog(self, release_info)
         self._log_panel.log("info", f"Update available: v{release_info['version']}")
+
+    # ---- pongoOS Emulator ----
+
+    def _on_pongoos_launch(self):
+        """Launch pongoOS emulator."""
+        if self._pongoos and self._pongoos.running:
+            return
+
+        self._pongoos_panel.set_launching()
+        self._log_panel.log_separator()
+        self._log_panel.log("info", "Launching pongoOS emulator...")
+
+        # Create emulator instance
+        self._pongoos = PongoOSEmulator(log_callback=self._log_t)
+
+        # Start in background thread to avoid blocking
+        def start_worker():
+            started = self._pongoos.start(
+                status_callback=self._pongoos_status_changed
+            )
+            if not started:
+                self.after(0, lambda: self._pongoos_panel.set_error("Failed to start"))
+
+        threading.Thread(target=start_worker, daemon=True).start()
+
+    def _pongoos_status_changed(self, status):
+        """Called from pongoOS monitor thread."""
+        if status == "running":
+            self.after(0, self._pongoos_panel.set_running)
+            self._log_t("success", "pongoOS emulator is running")
+        elif status == "stopped":
+            self.after(0, self._pongoos_panel.set_stopped)
+        elif status == "error":
+            self.after(0, lambda: self._pongoos_panel.set_error("Crashed"))
+
+    def _on_pongoos_stop(self):
+        """Stop pongoOS emulator."""
+        if self._pongoos and self._pongoos.running:
+            self._log_panel.log("info", "Stopping pongoOS emulator...")
+            self._pongoos.stop()
+            self._pongoos_panel.set_stopped()
+            self._log_panel.log("info", "pongoOS emulator stopped")
+
+    def _on_pongoos_setup(self):
+        """Open setup wizard for pongoOS."""
+        from gui.setup_window import SetupWindow
+        from config.pongoos_setup import PONGOOS_STEPS, get_steps_for_platform, get_script_for_step, detect_platform
+
+        if self._setup_window and self._setup_window.winfo_exists():
+            self._setup_window.focus()
+            return
+
+        # Create setup window with pongoOS steps
+        platform = detect_platform()
+        steps = get_steps_for_platform(platform)
+
+        # Use the existing SetupWindow but with pongoOS steps
+        # TODO: This needs a modified SetupWindow that accepts custom steps
+        self._log_panel.log("info", "pongoOS setup wizard - coming soon!")
+        self._log_panel.log("info", "For now, see PONGOOS_EMULATOR.md for manual setup")
+
+    def _on_pongoos_console(self):
+        """Open pongoOS console window."""
+        if self._pongoos_console and self._pongoos_console.winfo_exists():
+            self._pongoos_console.focus()
+            return
+
+        def send_command(cmd):
+            if self._pongoos and self._pongoos.running:
+                self._pongoos.send_command(cmd)
+
+        self._pongoos_console = PongoOSConsole(self, on_send_command=send_command)
+
+        # Redirect pongoOS output to console
+        old_log = self._pongoos._log if self._pongoos else None
+
+        def new_log(level, msg):
+            if old_log:
+                old_log(level, msg)
+            if self._pongoos_console and self._pongoos_console.winfo_exists():
+                self._pongoos_console.append_output(f"{msg}\n")
