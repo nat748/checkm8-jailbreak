@@ -1,0 +1,252 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate icons
+        run: python assets/generate_icon.py
+
+      - name: Build with PyInstaller
+        run: python build.py
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkm8-windows
+          path: dist/checkm8/
+
+      - name: Zip Windows portable
+        run: |
+          cd dist
+          Compress-Archive -Path checkm8 -DestinationPath checkm8-windows-portable.zip
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/checkm8-windows-portable.zip
+            dist/checkm8-1.0.0-setup.exe
+          draft: false
+          prerelease: false
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate icons
+        run: |
+          python assets/generate_icon.py
+          cd assets
+          mkdir -p icon.iconset
+          sips -z 16 16   icon_256.png --out icon.iconset/icon_16x16.png
+          sips -z 32 32   icon_256.png --out icon.iconset/icon_16x16@2x.png
+          sips -z 32 32   icon_256.png --out icon.iconset/icon_32x32.png
+          sips -z 64 64   icon_256.png --out icon.iconset/icon_32x32@2x.png
+          sips -z 128 128 icon_256.png --out icon.iconset/icon_128x128.png
+          sips -z 256 256 icon_256.png --out icon.iconset/icon_128x128@2x.png
+          sips -z 256 256 icon_256.png --out icon.iconset/icon_256x256.png
+          sips -z 512 512 icon_256.png --out icon.iconset/icon_256x256@2x.png
+          iconutil -c icns icon.iconset -o icon.icns
+
+      - name: Build with PyInstaller
+        run: python build.py
+
+      - name: Create DMG
+        run: |
+          brew install create-dmg || true
+          create-dmg \
+            --volname "checkm8 Installer" \
+            --volicon "assets/icon.icns" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "checkm8.app" 175 120 \
+            --hide-extension "checkm8.app" \
+            --app-drop-link 425 120 \
+            "dist/checkm8-macos.dmg" \
+            "dist/checkm8.app" || \
+          hdiutil create -volname "checkm8" -srcfolder dist/checkm8.app -ov -format UDZO dist/checkm8-macos.dmg
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/checkm8-macos.dmg
+            dist/checkm8-1.0.0.pkg
+          draft: false
+          prerelease: false
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev fakeroot
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate icons
+        run: python assets/generate_icon.py
+
+      - name: Build with PyInstaller
+        run: python build.py
+
+      - name: Create tarball
+        run: |
+          cd dist
+          tar -czf checkm8-linux-x86_64.tar.gz checkm8/
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/checkm8-linux-x86_64.tar.gz
+            dist/checkm8_1.0.0_amd64.deb
+          draft: false
+          prerelease: false
+
+  create-release-notes:
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos, build-linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          cat << 'EOF' > release_notes.md
+          ## checkm8 GUI Release
+
+          A modern graphical interface for the checkm8 bootrom exploit with Inferno emulator support.
+
+          ### Downloads
+
+          #### Windows
+          - **checkm8-windows-portable.zip** - Portable version (no installation required)
+          - **checkm8-1.0.0-setup.exe** - Installer with shortcuts
+
+          #### macOS
+          - **checkm8-macos.dmg** - Drag-and-drop installer
+          - **checkm8-1.0.0.pkg** - Traditional package installer
+
+          #### Linux
+          - **checkm8-linux-x86_64.tar.gz** - Portable tarball
+          - **checkm8_1.0.0_amd64.deb** - Debian package (Ubuntu/Debian)
+
+          ### What's New
+
+          - 🎨 Liquid glass UI with animated gradient background
+          - 🔌 USB DFU device detection and exploitation
+          - 📱 Inferno iPhone 11 emulator integration
+          - 🧙 Automated setup wizard for all platforms
+          - 📦 One-click Sileo bootstrap installation
+          - ℹ️ Credits window with all open-source licenses
+
+          ### Installation
+
+          **Windows:**
+          ```
+          Run checkm8-1.0.0-setup.exe or extract checkm8-windows-portable.zip
+          ```
+
+          **macOS:**
+          ```
+          Open checkm8-macos.dmg and drag to Applications
+          ```
+
+          **Linux:**
+          ```bash
+          sudo dpkg -i checkm8_1.0.0_amd64.deb
+          # or
+          tar -xzf checkm8-linux-x86_64.tar.gz && ./checkm8/checkm8
+          ```
+
+          ### Requirements
+
+          - **For physical devices:** USB connection, device in DFU mode
+          - **For Inferno emulator:**
+            - Windows: WSL 2 with Ubuntu
+            - macOS/Linux: Native execution
+            - 6+ GB RAM, 32 GB disk space
+
+          ### Supported Devices
+
+          - iPhone 4S through iPhone X (A5-A11 chips)
+          - iPhone 11 (A13) via Inferno emulator
+
+          ### Credits
+
+          See the About window in the app for full credits. Key contributors:
+          - axi0mX (checkm8 exploit)
+          - ChefKissInc (Inferno emulator)
+          - checkra1n team (bootstrap)
+          - libimobiledevice project
+          - CustomTkinter (Tom Schimansky)
+
+          ### Legal
+
+          For educational and authorized security research only. See LICENSE for details.
+          EOF
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Update release description
+        uses: softprops/action-gh-release@v1
+        with:
+          body: ${{ steps.notes.outputs.notes }}
+          draft: false
+          prerelease: false
