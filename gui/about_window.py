@@ -84,8 +84,9 @@ _CREDITS = [
 
 class AboutWindow(ctk.CTkToplevel):
 
-    def __init__(self, parent):
+    def __init__(self, parent, on_check_updates=None):
         super().__init__(parent)
+        self._on_check_updates = on_check_updates
 
         self.title("About checkm8")
         self.geometry("560x620")
@@ -141,14 +142,30 @@ class AboutWindow(ctk.CTkToplevel):
             font=ctk.CTkFont(size=10), text_color=COLOR_TEXT_DIM,
         ).pack(pady=(0, 12))
 
-        # Close
+        # Buttons
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=(0, 14))
+
+        # Check for updates button (if callback provided)
+        if self._on_check_updates:
+            ctk.CTkButton(
+                btn_frame, text="Check for Updates", height=36, corner_radius=10,
+                width=150,
+                font=ctk.CTkFont(size=13),
+                fg_color=COLOR_ACCENT, hover_color="#9b6dff",
+                text_color="white",
+                command=self._on_check_updates,
+            ).pack(side="left", padx=4)
+
+        # Close button
         ctk.CTkButton(
-            self, text="Close", height=36, corner_radius=10,
+            btn_frame, text="Close", height=36, corner_radius=10,
+            width=100,
             font=ctk.CTkFont(size=13),
             fg_color=COLOR_GLASS_LIGHT, hover_color=COLOR_GLASS_BORDER,
             text_color=COLOR_TEXT_DIM,
             command=self.destroy,
-        ).pack(pady=(0, 14))
+        ).pack(side="left", padx=4)
 
     def _make_credit_row(self, parent, name, url, desc):
         row = ctk.CTkFrame(parent, fg_color=COLOR_GLASS_LIGHT, corner_radius=10)

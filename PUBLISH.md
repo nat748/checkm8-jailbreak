@@ -98,16 +98,13 @@ When all builds complete:
 Each release includes:
 
 ### Windows
-- `checkm8-windows-portable.zip` - Portable version (no install)
-- `checkm8-1.0.0-setup.exe` - Full installer with shortcuts
+- `checkm8-windows-portable.zip` - Portable version (extract and run)
 
 ### macOS
 - `checkm8-macos.dmg` - Disk image (drag to Applications)
-- `checkm8-1.0.0.pkg` - Traditional installer package
 
 ### Linux
 - `checkm8-linux-x86_64.tar.gz` - Portable tarball
-- `checkm8_1.0.0_amd64.deb` - Debian/Ubuntu package
 
 ## Troubleshooting
 

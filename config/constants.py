@@ -3,6 +3,11 @@ APP_VERSION = "1.0.0"
 WINDOW_WIDTH = 1160
 WINDOW_HEIGHT = 920
 
+# GitHub repository for updates
+# Set these to your own GitHub username and repo name
+GITHUB_OWNER = "YOUR_USERNAME"  # Replace with your GitHub username
+GITHUB_REPO = "checkm8-jailbreak"  # Replace with your repo name
+
 # Apple USB identifiers
 APPLE_VID = 0x05AC
 DFU_PID = 0x1227

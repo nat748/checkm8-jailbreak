@@ -14,6 +14,7 @@ A modern graphical interface for the checkm8 bootrom exploit (CVE-2019-8900) tar
 - **Inferno Emulator** — Launch and control the iPhone 11 emulator via WSL/native
 - **Setup Wizard** — Automated installation of Inferno emulator (all platforms)
 - **Bootstrap Installer** — One-click checkra1n bootstrap installation (Sileo package manager)
+- **Auto-Updater** — Automatic update notifications from GitHub releases
 - **Multi-Platform** — Windows (via WSL), macOS, Linux
 
 ## Quick Start

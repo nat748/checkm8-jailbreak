@@ -28,6 +28,8 @@ from config.constants import (
     COLOR_TEXT_BRIGHT,
     GLASS_RADIUS,
     GLASS_BORDER_WIDTH,
+    GITHUB_OWNER,
+    GITHUB_REPO,
 )
 from config.device_configs import get_config_for_cpid
 from config.emulator_config import EmulatorProcess
@@ -42,6 +44,8 @@ from gui.emulator_panel import EmulatorPanel
 from gui.log_panel import LogPanel
 from gui.setup_window import SetupWindow
 from gui.about_window import AboutWindow
+from gui.update_dialog import show_update_dialog
+from core.updater import check_for_updates_async
 
 
 class App(ctk.CTk):
@@ -65,6 +69,7 @@ class App(ctk.CTk):
         self._bootstrap_thread = None
         self._setup_window = None
         self._about_window = None
+        self._update_dialog = None
         self._log_queue = queue.Queue()
         self._progress_queue = queue.Queue()
 
@@ -180,6 +185,10 @@ class App(ctk.CTk):
         self._log_panel.log("info", f"{APP_NAME} v{APP_VERSION}")
         self._log_panel.log_separator()
         self._log_panel.log("info", "Connect device in DFU mode, then Detect.")
+
+        # Check for updates in background (non-blocking)
+        if GITHUB_OWNER != "YOUR_USERNAME":  # Only if configured
+            self.after(2000, self._check_for_updates)
 
     # ---- Win11 effects ----
 
@@ -460,4 +469,28 @@ class App(ctk.CTk):
         if self._about_window and self._about_window.winfo_exists():
             self._about_window.focus()
             return
-        self._about_window = AboutWindow(self)
+        self._about_window = AboutWindow(self, on_check_updates=self._check_for_updates)
+
+    # ---- Updates ----
+
+    def _check_for_updates(self):
+        """Check for updates from GitHub releases."""
+        if GITHUB_OWNER == "YOUR_USERNAME":
+            self._log_panel.log("warn", "Update check skipped - GitHub repo not configured")
+            return
+
+        def on_update_result(update_available: bool, release_info: dict):
+            if update_available and release_info:
+                # Show update dialog on UI thread
+                self.after(0, lambda: self._show_update_dialog(release_info))
+
+        check_for_updates_async(GITHUB_OWNER, GITHUB_REPO, on_update_result)
+
+    def _show_update_dialog(self, release_info: dict):
+        """Show update notification dialog."""
+        if self._update_dialog and self._update_dialog.winfo_exists():
+            self._update_dialog.focus()
+            return
+
+        self._update_dialog = show_update_dialog(self, release_info)
+        self._log_panel.log("info", f"Update available: v{release_info['version']}")

@@ -30,18 +30,19 @@ jobs:
         run: python assets/generate_icon.py
 
       - name: Build with PyInstaller
-        run: python build.py
-
-      - name: Upload Windows executable
-        uses: actions/upload-artifact@v4
-        with:
-          name: checkm8-windows
-          path: dist/checkm8/
+        run: |
+          python -m PyInstaller checkm8.spec --clean
 
       - name: Zip Windows portable
         run: |
           cd dist
           Compress-Archive -Path checkm8 -DestinationPath checkm8-windows-portable.zip
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkm8-windows
+          path: dist/checkm8-windows-portable.zip
 
       - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -49,7 +50,6 @@ jobs:
         with:
           files: |
             dist/checkm8-windows-portable.zip
-            dist/checkm8-1.0.0-setup.exe
           draft: false
           prerelease: false
 
@@ -64,44 +64,45 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install system dependencies
+        run: |
+          # Ensure Tcl/Tk is available for tkinter
+          brew install python-tk@3.11 || true
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # Verify tkinter is available
+          python -c "import tkinter; print('tkinter OK')"
 
       - name: Generate icons
         run: |
           python assets/generate_icon.py
           cd assets
           mkdir -p icon.iconset
-          sips -z 16 16   icon_256.png --out icon.iconset/icon_16x16.png
-          sips -z 32 32   icon_256.png --out icon.iconset/icon_16x16@2x.png
-          sips -z 32 32   icon_256.png --out icon.iconset/icon_32x32.png
-          sips -z 64 64   icon_256.png --out icon.iconset/icon_32x32@2x.png
-          sips -z 128 128 icon_256.png --out icon.iconset/icon_128x128.png
-          sips -z 256 256 icon_256.png --out icon.iconset/icon_128x128@2x.png
-          sips -z 256 256 icon_256.png --out icon.iconset/icon_256x256.png
-          sips -z 512 512 icon_256.png --out icon.iconset/icon_256x256@2x.png
-          iconutil -c icns icon.iconset -o icon.icns
+          # Create all required icon sizes
+          sips -z 16 16     icon_256.png --out icon.iconset/icon_16x16.png
+          sips -z 32 32     icon_256.png --out icon.iconset/icon_16x16@2x.png
+          sips -z 32 32     icon_256.png --out icon.iconset/icon_32x32.png
+          sips -z 64 64     icon_256.png --out icon.iconset/icon_32x32@2x.png
+          sips -z 128 128   icon_256.png --out icon.iconset/icon_128x128.png
+          sips -z 256 256   icon_256.png --out icon.iconset/icon_128x128@2x.png
+          sips -z 256 256   icon_256.png --out icon.iconset/icon_256x256.png
+          sips -z 512 512   icon_256.png --out icon.iconset/icon_256x256@2x.png
+          sips -z 512 512   icon_256.png --out icon.iconset/icon_512x512.png
+          # Generate .icns file
+          iconutil -c icns icon.iconset -o icon.icns || echo "Warning: iconutil failed, continuing without .icns"
 
       - name: Build with PyInstaller
-        run: python build.py
+        run: |
+          python -m PyInstaller checkm8.spec --clean
 
       - name: Create DMG
         run: |
-          brew install create-dmg || true
-          create-dmg \
-            --volname "checkm8 Installer" \
-            --volicon "assets/icon.icns" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "checkm8.app" 175 120 \
-            --hide-extension "checkm8.app" \
-            --app-drop-link 425 120 \
-            "dist/checkm8-macos.dmg" \
-            "dist/checkm8.app" || \
+          # Simple DMG creation - always use hdiutil for reliability
           hdiutil create -volname "checkm8" -srcfolder dist/checkm8.app -ov -format UDZO dist/checkm8-macos.dmg
+          echo "✓ DMG created successfully"
 
       - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -109,7 +110,6 @@ jobs:
         with:
           files: |
             dist/checkm8-macos.dmg
-            dist/checkm8-1.0.0.pkg
           draft: false
           prerelease: false
 
@@ -138,7 +138,8 @@ jobs:
         run: python assets/generate_icon.py
 
       - name: Build with PyInstaller
-        run: python build.py
+        run: |
+          python -m PyInstaller checkm8.spec --clean
 
       - name: Create tarball
         run: |
@@ -151,7 +152,6 @@ jobs:
         with:
           files: |
             dist/checkm8-linux-x86_64.tar.gz
-            dist/checkm8_1.0.0_amd64.deb
           draft: false
           prerelease: false
 
@@ -174,16 +174,13 @@ jobs:
           ### Downloads
 
           #### Windows
-          - **checkm8-windows-portable.zip** - Portable version (no installation required)
-          - **checkm8-1.0.0-setup.exe** - Installer with shortcuts
+          - **checkm8-windows-portable.zip** - Portable version (extract and run checkm8.exe)
 
           #### macOS
-          - **checkm8-macos.dmg** - Drag-and-drop installer
-          - **checkm8-1.0.0.pkg** - Traditional package installer
+          - **checkm8-macos.dmg** - Drag-and-drop disk image (drag checkm8.app to Applications)
 
           #### Linux
-          - **checkm8-linux-x86_64.tar.gz** - Portable tarball
-          - **checkm8_1.0.0_amd64.deb** - Debian package (Ubuntu/Debian)
+          - **checkm8-linux-x86_64.tar.gz** - Portable tarball (extract and run ./checkm8/checkm8)
 
           ### What's New
 
@@ -197,21 +194,20 @@ jobs:
           ### Installation
 
           **Windows:**
-          ```
-          Run checkm8-1.0.0-setup.exe or extract checkm8-windows-portable.zip
-          ```
+          1. Download `checkm8-windows-portable.zip`
+          2. Extract anywhere
+          3. Run `checkm8.exe`
 
           **macOS:**
-          ```
-          Open checkm8-macos.dmg and drag to Applications
-          ```
+          1. Download `checkm8-macos.dmg`
+          2. Open the DMG file
+          3. Drag `checkm8.app` to Applications folder
+          4. Right-click and select "Open" the first time (to bypass Gatekeeper)
 
           **Linux:**
-          ```bash
-          sudo dpkg -i checkm8_1.0.0_amd64.deb
-          # or
-          tar -xzf checkm8-linux-x86_64.tar.gz && ./checkm8/checkm8
-          ```
+          1. Download `checkm8-linux-x86_64.tar.gz`
+          2. Extract: `tar -xzf checkm8-linux-x86_64.tar.gz`
+          3. Run: `./checkm8/checkm8`
 
           ### Requirements
 

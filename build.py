@@ -99,41 +99,30 @@ def build_pyinstaller():
     return True
 
 
-def build_windows_installer():
-    """Create Windows installer using Inno Setup (if available)."""
+def build_windows_zip():
+    """Create Windows portable ZIP."""
     if not IS_WIN:
-        print("Skipping Windows installer (not on Windows)")
         return
 
-    inno_script = ROOT / 'installer_windows.iss'
-    if not inno_script.exists():
-        print("Inno Setup script not found, skipping installer creation")
+    zip_path = DIST / 'checkm8-windows-portable.zip'
+    checkm8_dir = DIST / 'checkm8'
+
+    if not checkm8_dir.exists():
+        print("Build directory not found")
         return
 
-    # Try to find Inno Setup
-    inno_paths = [
-        r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-        r"C:\Program Files\Inno Setup 6\ISCC.exe",
-    ]
-    iscc = None
-    for path in inno_paths:
-        if Path(path).exists():
-            iscc = path
-            break
+    print("\nCreating Windows portable ZIP...")
+    shutil.make_archive(str(zip_path.with_suffix('')), 'zip', DIST, 'checkm8')
 
-    if iscc:
-        print("\nCreating Windows installer...")
-        run([iscc, str(inno_script)])
-        print("✓ Windows installer created")
+    if zip_path.exists():
+        print(f"✓ Windows ZIP created: {zip_path}")
     else:
-        print("Inno Setup not found - skipping installer creation")
-        print("  Install from: https://jrsoftware.org/isdl.php")
+        print("✗ Failed to create ZIP")
 
 
-def build_macos_pkg():
-    """Create macOS .pkg installer."""
+def build_macos_dmg():
+    """Create macOS DMG (requires hdiutil on macOS)."""
     if not IS_MAC:
-        print("Skipping macOS .pkg (not on macOS)")
         return
 
     app_path = DIST / 'checkm8.app'
@@ -141,29 +130,28 @@ def build_macos_pkg():
         print("App bundle not found - build with PyInstaller first")
         return
 
-    pkg_path = DIST / 'checkm8-1.0.0.pkg'
-    print("\nCreating macOS .pkg installer...")
+    dmg_path = DIST / 'checkm8-macos.dmg'
+    print("\nCreating macOS DMG...")
 
-    # Use pkgbuild to create a simple installer
+    # Use hdiutil to create DMG
     run([
-        'pkgbuild',
-        '--root', str(DIST),
-        '--identifier', 'com.checkm8.gui',
-        '--version', '1.0.0',
-        '--install-location', '/Applications',
-        str(pkg_path)
+        'hdiutil', 'create',
+        '-volname', 'checkm8',
+        '-srcfolder', str(app_path),
+        '-ov',
+        '-format', 'UDZO',
+        str(dmg_path)
     ])
 
-    if pkg_path.exists():
-        print(f"✓ macOS .pkg created: {pkg_path}")
+    if dmg_path.exists():
+        print(f"✓ macOS DMG created: {dmg_path}")
     else:
-        print("✗ Failed to create .pkg")
+        print("✗ Failed to create DMG")
 
 
-def build_linux_deb():
-    """Create Debian .deb package."""
+def build_linux_tarball():
+    """Create Linux tarball."""
     if not IS_LINUX:
-        print("Skipping .deb package (not on Linux)")
         return
 
     bin_path = DIST / 'checkm8' / 'checkm8'
@@ -171,65 +159,21 @@ def build_linux_deb():
         print("Binary not found - build with PyInstaller first")
         return
 
-    print("\nCreating Debian .deb package...")
+    tar_path = DIST / 'checkm8-linux-x86_64.tar.gz'
+    print("\nCreating Linux tarball...")
 
-    # Create debian package structure
-    deb_root = BUILD / 'checkm8_1.0.0_amd64'
-    deb_root.mkdir(parents=True, exist_ok=True)
+    # Create tarball
+    shutil.make_archive(
+        str(tar_path.with_suffix('').with_suffix('')),
+        'gztar',
+        DIST,
+        'checkm8'
+    )
 
-    # DEBIAN control directory
-    debian_dir = deb_root / 'DEBIAN'
-    debian_dir.mkdir(exist_ok=True)
-
-    # Control file
-    control = debian_dir / 'control'
-    control.write_text(f"""Package: checkm8
-Version: 1.0.0
-Section: utils
-Priority: optional
-Architecture: amd64
-Maintainer: checkm8 Project
-Description: checkm8 bootrom exploit GUI
- A5-A11 bootrom exploit tool with Inferno emulator integration.
- Includes setup wizard for full Inferno installation.
-Depends: libusb-1.0-0, python3
-""")
-
-    # Install files
-    usr_bin = deb_root / 'usr' / 'bin'
-    usr_bin.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(DIST / 'checkm8', usr_bin / 'checkm8')
-
-    # Desktop entry
-    applications = deb_root / 'usr' / 'share' / 'applications'
-    applications.mkdir(parents=True, exist_ok=True)
-    desktop = applications / 'checkm8.desktop'
-    desktop.write_text(f"""[Desktop Entry]
-Name=checkm8
-Comment=Bootrom exploit tool
-Exec=/usr/bin/checkm8/checkm8
-Icon=checkm8
-Terminal=false
-Type=Application
-Categories=Utility;System;
-""")
-
-    # Icon
-    icons = deb_root / 'usr' / 'share' / 'icons' / 'hicolor' / '256x256' / 'apps'
-    icons.mkdir(parents=True, exist_ok=True)
-    if (ROOT / 'assets' / 'icon.png').exists():
-        shutil.copy(ROOT / 'assets' / 'icon.png', icons / 'checkm8.png')
-
-    # Build .deb
-    run(['dpkg-deb', '--build', str(deb_root)])
-
-    deb_file = BUILD / 'checkm8_1.0.0_amd64.deb'
-    if deb_file.exists():
-        # Move to dist
-        shutil.move(str(deb_file), DIST / 'checkm8_1.0.0_amd64.deb')
-        print(f"✓ Debian package created: {DIST / 'checkm8_1.0.0_amd64.deb'}")
+    if tar_path.exists():
+        print(f"✓ Linux tarball created: {tar_path}")
     else:
-        print("✗ Failed to create .deb")
+        print("✗ Failed to create tarball")
 
 
 def main():
@@ -255,15 +199,13 @@ def main():
         print("\n✗ Build failed")
         sys.exit(1)
 
-    # Create platform-specific installers
-    if args.all or IS_WIN:
-        build_windows_installer()
-
-    if args.all or IS_MAC:
-        build_macos_pkg()
-
-    if args.all or IS_LINUX:
-        build_linux_deb()
+    # Create platform-specific packages
+    if IS_WIN:
+        build_windows_zip()
+    elif IS_MAC:
+        build_macos_dmg()
+    elif IS_LINUX:
+        build_linux_tarball()
 
     print("\n" + "="*50)
     print("Build complete!")

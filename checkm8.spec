@@ -15,6 +15,12 @@ IS_WIN = sys.platform == 'win32'
 IS_MAC = sys.platform == 'darwin'
 IS_LINUX = not (IS_WIN or IS_MAC)
 
+import tkinter
+import customtkinter
+
+# Get CustomTkinter assets path
+ctk_path = Path(customtkinter.__file__).parent
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -22,15 +28,35 @@ a = Analysis(
     datas=[
         # Include CLAUDE.md for reference
         ('CLAUDE.md', '.'),
+        # Include CustomTkinter assets
+        (str(ctk_path / 'assets'), 'customtkinter/assets'),
     ],
     hiddenimports=[
+        '_tkinter',
+        'tkinter',
+        'tkinter.ttk',
+        'tkinter.messagebox',
+        'tkinter.filedialog',
+        'PIL',
+        'PIL._imagingtk',
         'PIL._tkinter_finder',
+        'PIL.Image',
+        'PIL.ImageTk',
+        'PIL.ImageDraw',
+        'PIL.ImageFont',
         'customtkinter',
         'usb',
         'usb.core',
         'usb.util',
         'usb.backend',
         'usb.backend.libusb1',
+        'usb.backend.libusb0',
+        'usb.backend.openusb',
+        'queue',
+        'threading',
+        'webbrowser',
+        'subprocess',
+        'pathlib',
     ],
     hookspath=[],
     hooksconfig={},
@@ -67,7 +93,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/icon.ico' if IS_WIN else 'assets/icon.icns' if IS_MAC else None,
+    icon='assets/icon.ico' if IS_WIN else ('assets/icon.icns' if IS_MAC and Path('assets/icon.icns').exists() else None),
 )
 
 coll = COLLECT(
@@ -86,7 +112,7 @@ if IS_MAC:
     app = BUNDLE(
         coll,
         name='checkm8.app',
-        icon='assets/icon.icns',
+        icon='assets/icon.icns' if Path('assets/icon.icns').exists() else None,
         bundle_identifier='com.checkm8.gui',
         version='1.0.0',
         info_plist={
@@ -97,5 +123,7 @@ if IS_MAC:
             'NSHumanReadableCopyright': 'Open Source - See About for credits',
             'NSHighResolutionCapable': 'True',
             'LSMinimumSystemVersion': '10.13.0',
+            'NSPrincipalClass': 'NSApplication',
+            'LSApplicationCategoryType': 'public.app-category.utilities',
         },
     )

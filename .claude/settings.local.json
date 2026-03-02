@@ -43,7 +43,8 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\(''build.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''build.py OK''\\)\")",
       "Bash(test -f README.md)",
       "Bash(python -c \"exec\\(open\\(''checkm8.spec''\\).read\\(\\).replace\\(''Analysis'', ''pass #Analysis''\\)\\); print\\(''checkm8.spec syntax OK''\\)\")",
-      "Bash(python -c \"import PyInstaller; print\\(''PyInstaller installed:'', PyInstaller.__version__\\)\")"
+      "Bash(python -c \"import PyInstaller; print\\(''PyInstaller installed:'', PyInstaller.__version__\\)\")",
+      "Bash(python -m py_compile core/updater.py gui/update_dialog.py)"
     ]
   }
 }
