@@ -46,7 +46,9 @@
       "Bash(python -c \"import PyInstaller; print\\(''PyInstaller installed:'', PyInstaller.__version__\\)\")",
       "Bash(python -m py_compile core/updater.py gui/update_dialog.py)",
       "Bash(grep -E '\\\\\\\\r')",
-      "Bash(python -c \"import sys; data = open\\(''n:/checkm8-jailbreak/config/pongoos_setup.py'', ''rb''\\).read\\(\\)[:1000]; print\\(''CRLF count:'', data.count\\(b''\\\\r\\\\n''\\)\\); print\\(''LF-only count:'', data.count\\(b''\\\\n''\\) - data.count\\(b''\\\\r\\\\n''\\)\\)\")"
+      "Bash(python -c \"import sys; data = open\\(''n:/checkm8-jailbreak/config/pongoos_setup.py'', ''rb''\\).read\\(\\)[:1000]; print\\(''CRLF count:'', data.count\\(b''\\\\r\\\\n''\\)\\); print\\(''LF-only count:'', data.count\\(b''\\\\n''\\) - data.count\\(b''\\\\r\\\\n''\\)\\)\")",
+      "Bash(ls -1 /n/checkm8-jailbreak/gui/*.py)",
+      "Bash(curl -sL https://api.github.com/repos/karamzaki/pongoOS-QEMU)"
     ]
   }
 }

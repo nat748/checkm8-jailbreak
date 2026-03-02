@@ -77,8 +77,7 @@ class EmulatorProcess:
                 wsl_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
+                bufsize=0,
             )
         except FileNotFoundError:
             self._log_cb("error", "WSL not found. Is WSL installed?")
@@ -114,8 +113,8 @@ class EmulatorProcess:
             self._status_callback("running")
 
         try:
-            for line in self._process.stdout:
-                line = line.rstrip("\n\r")
+            for raw_line in iter(self._process.stdout.readline, b""):
+                line = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
                 if line:
                     self._log_cb("info", f"[EMU] {line}")
         except (ValueError, OSError):

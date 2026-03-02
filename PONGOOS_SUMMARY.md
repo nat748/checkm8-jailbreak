@@ -54,7 +54,7 @@ emulator.stop()
 2. **Download pongoOS-QEMU** - Clones and builds pongoOS
 3. **Test Emulator** - Verifies QEMU can boot pongoOS
 
-**Uses [citruz/pongoOS-QEMU](https://github.com/citruz/pongoOS-QEMU)** - QEMU-optimized fork
+**Uses [karamzaki/pongoOS-QEMU](https://github.com/karamzaki/pongoOS-QEMU)** - QEMU-optimized fork
 
 ### 5. [PONGOOS_EMULATOR.md](PONGOOS_EMULATOR.md)
 **Purpose**: Complete documentation

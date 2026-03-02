@@ -30,7 +30,7 @@ def create_icon():
             # Try to use a nice font
             font_size = size // 3
             font = ImageFont.truetype("arial.ttf", font_size)
-        except:
+        except (OSError, IOError):
             # Fallback to default
             font = ImageFont.load_default()
 

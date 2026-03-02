@@ -92,7 +92,7 @@ The wizard now includes pongoOS setup with 3 automated steps:
 ### Step 2: Download pongoOS
 **Platforms**: All
 **Action**: Clones and builds pongoOS-QEMU fork
-- Clone: https://github.com/citruz/pongoOS-QEMU
+- Clone: https://github.com/karamzaki/pongoOS-QEMU
 - Build with clang/lld
 - Copy binary to work directory
 

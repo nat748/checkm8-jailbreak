@@ -64,7 +64,7 @@ sudo apt-get install qemu-system-aarch64
 
 ```bash
 # Clone the QEMU-optimized fork
-git clone https://github.com/citruz/pongoOS-QEMU.git
+git clone https://github.com/karamzaki/pongoOS-QEMU.git
 cd pongoOS-QEMU
 
 # Build
@@ -196,7 +196,7 @@ Boot args set: -v debug=0x2014e
 
 ### pongoOS-QEMU Fork
 
-The [citruz/pongoOS-QEMU](https://github.com/citruz/pongoOS-QEMU) fork includes:
+The [karamzaki/pongoOS-QEMU](https://github.com/karamzaki/pongoOS-QEMU) fork includes:
 - QEMU-specific patches
 - Virtual hardware support
 - USB emulation improvements
@@ -321,7 +321,7 @@ This allows testing DFU protocol communication.
 ## Resources
 
 - [pongoOS GitHub](https://github.com/checkra1n/pongoOS)
-- [pongoOS-QEMU Fork](https://github.com/citruz/pongoOS-QEMU)
+- [pongoOS-QEMU Fork](https://github.com/karamzaki/pongoOS-QEMU)
 - [QEMU Documentation](https://www.qemu.org/docs/master/)
 - [checkra1n](https://checkra.in/)
 

@@ -237,7 +237,7 @@ def download_pongoos(work_dir: Path, log_callback: Callable[[str, str], None]) -
     log_callback("info", "Downloading pongoOS-QEMU...")
 
     # pongoOS-QEMU repository (optimized fork for QEMU emulation)
-    repo_url = "https://github.com/citruz/pongoOS-QEMU.git"
+    repo_url = "https://github.com/karamzaki/pongoOS-QEMU.git"
     repo_dir = work_dir / "pongoOS-src"
 
     try:
@@ -270,11 +270,10 @@ def download_pongoos(work_dir: Path, log_callback: Callable[[str, str], None]) -
         result = subprocess.run(
             build_cmd,
             capture_output=True,
-            text=True,
         )
 
         if result.returncode != 0:
-            log_callback("error", f"Build failed: {result.stderr}")
+            log_callback("error", f"Build failed: {result.stderr.decode('utf-8', errors='replace')}")
             return False
 
         # Copy built binary
