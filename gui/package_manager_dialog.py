@@ -8,10 +8,10 @@ import customtkinter as ctk
 
 from config.constants import (
     COLOR_BG,
-    COLOR_GLASS_DARK,
+    COLOR_GLASS,
     COLOR_GLASS_LIGHT,
     COLOR_TEXT_DIM,
-    COLOR_TEXT_PRIMARY,
+    COLOR_TEXT_BRIGHT,
     COLOR_ACCENT,
 )
 
@@ -39,7 +39,7 @@ class PackageManagerDialog(ctk.CTkToplevel):
     def _create_ui(self):
         """Build the dialog UI."""
         # Main container with padding
-        container = ctk.CTkFrame(self, fg_color=COLOR_GLASS_DARK, corner_radius=15)
+        container = ctk.CTkFrame(self, fg_color=COLOR_GLASS, corner_radius=15)
         container.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Title
@@ -47,7 +47,7 @@ class PackageManagerDialog(ctk.CTkToplevel):
             container,
             text="Select Package Manager",
             font=ctk.CTkFont(size=18, weight="bold"),
-            text_color=COLOR_TEXT_PRIMARY,
+            text_color=COLOR_TEXT_BRIGHT,
         )
         title.pack(pady=(20, 10))
 
@@ -108,7 +108,7 @@ class PackageManagerDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=14, weight="bold" if recommended else "normal"),
             fg_color=COLOR_GLASS_LIGHT if not recommended else COLOR_ACCENT,
             hover_color=COLOR_ACCENT,
-            text_color=COLOR_TEXT_PRIMARY,
+            text_color=COLOR_TEXT_BRIGHT,
             height=80,
             corner_radius=10,
             command=lambda: self._on_select(value),

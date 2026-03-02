@@ -31,6 +31,7 @@ from config.constants import (
     GITHUB_OWNER,
     GITHUB_REPO,
 )
+from config.themes import toggle_theme, get_current_theme, save_theme_preference, load_theme_preference
 from config.device_configs import get_config_for_cpid
 from config.emulator_config import EmulatorProcess
 from core.usb_device import DFUDevice, DeviceInfo
@@ -59,7 +60,7 @@ class App(ctk.CTk):
 
         self.title(APP_NAME)
         self.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
-        self.minsize(900, 600)
+        self.minsize(900, 750)  # Increased to fit all panels
         self.configure(fg_color=COLOR_BG)
 
         # State
@@ -109,13 +110,25 @@ class App(ctk.CTk):
         )
         title.pack(side="left", padx=22)
 
+        # Theme switcher button
+        current_theme = get_current_theme()
+        theme_icon = "☾" if current_theme["name"] == "light" else "☀"
+        self._theme_btn = ctk.CTkButton(
+            self._header, text=theme_icon,
+            font=ctk.CTkFont(size=16),
+            fg_color=COLOR_GLASS_LIGHT, hover_color=COLOR_ACCENT,
+            text_color=COLOR_TEXT_DIM, height=28, width=40, corner_radius=8,
+            command=self._on_theme_toggle,
+        )
+        self._theme_btn.pack(side="right", padx=(0, 22))
+
         ctk.CTkButton(
             self._header, text="About",
             font=ctk.CTkFont(size=11),
             fg_color=COLOR_GLASS_LIGHT, hover_color=COLOR_ACCENT,
             text_color=COLOR_TEXT_DIM, height=28, width=60, corner_radius=8,
             command=self._on_about_clicked,
-        ).pack(side="right", padx=(0, 22))
+        ).pack(side="right", padx=(0, 8))
 
         ver = ctk.CTkLabel(
             self._header, text=APP_VERSION,
@@ -123,11 +136,11 @@ class App(ctk.CTk):
         )
         ver.pack(side="right", padx=6)
 
-        # Left column panel heights (920px window → ~840px available)
-        DEV_H = 0.22
-        EXP_H = 0.23
-        EMU_H = 0.20
-        PONGO_H = 0.18
+        # Left column panel heights (adjusted to fit all panels with scrolling room)
+        DEV_H = 0.20   # Device panel
+        EXP_H = 0.21   # Exploit panel
+        EMU_H = 0.19   # Inferno Emulator panel
+        PONGO_H = 0.17 # pongoOS Emulator panel
 
         # Device panel
         self._device_panel = DevicePanel(self, on_detect=self._on_detect_clicked)
@@ -492,7 +505,30 @@ class App(ctk.CTk):
         if self._setup_window and self._setup_window.winfo_exists():
             self._setup_window.focus()
             return
-        self._setup_window = SetupWindow(self)
+        self._setup_window = SetupWindow(self, emulator_type="inferno")
+
+    # ---- Theme Switcher ----
+
+    def _on_theme_toggle(self):
+        """Toggle between light and dark themes."""
+        new_theme = toggle_theme()
+        save_theme_preference()
+
+        # Show message
+        theme_name = "Light Mode" if new_theme["name"] == "light" else "Dark Mode"
+        self._log_panel.log("info", f"Switched to {theme_name}.")
+        self._log_panel.log("info", "Restarting app to apply theme...")
+
+        # Restart the app to apply theme
+        self.after(1000, self._restart_app)
+
+    def _restart_app(self):
+        """Restart the application."""
+        import sys
+        import os
+        self.destroy()
+        # Relaunch the app
+        os.execl(sys.executable, sys.executable, *sys.argv)
 
     # ---- About ----
 
@@ -570,21 +606,10 @@ class App(ctk.CTk):
 
     def _on_pongoos_setup(self):
         """Open setup wizard for pongoOS."""
-        from gui.setup_window import SetupWindow
-        from config.pongoos_setup import PONGOOS_STEPS, get_steps_for_platform, get_script_for_step, detect_platform
-
         if self._setup_window and self._setup_window.winfo_exists():
             self._setup_window.focus()
             return
-
-        # Create setup window with pongoOS steps
-        platform = detect_platform()
-        steps = get_steps_for_platform(platform)
-
-        # Use the existing SetupWindow but with pongoOS steps
-        # TODO: This needs a modified SetupWindow that accepts custom steps
-        self._log_panel.log("info", "pongoOS setup wizard - coming soon!")
-        self._log_panel.log("info", "For now, see PONGOOS_EMULATOR.md for manual setup")
+        self._setup_window = SetupWindow(self, emulator_type="pongoos")
 
     def _on_pongoos_console(self):
         """Open pongoOS console window."""

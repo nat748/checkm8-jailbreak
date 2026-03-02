@@ -48,7 +48,7 @@ DFU_MAX_TRANSFER_SIZE = 0x800
 PAYLOAD_OFFSET_ARMV7 = 0x400
 PAYLOAD_OFFSET_ARM64 = 0x800
 
-# Apple-inspired liquid glass colors
+# Default theme colors (Dark Mode - original aesthetic)
 COLOR_BG = "#08081a"
 COLOR_GLASS = "#16163a"
 COLOR_GLASS_LIGHT = "#1c1c48"
@@ -65,7 +65,7 @@ COLOR_TEXT = "#e2e8f0"
 COLOR_TEXT_DIM = "#7080a8"
 COLOR_TEXT_BRIGHT = "#f8fafc"
 
-# Fluid background blob colors (R, G, B) - muted, Apple-like
+# Fluid background blob colors (R, G, B) - dark theme
 BLOB_COLORS = [
     (70, 30, 160),    # deep blue-purple
     (35, 75, 195),    # ocean blue

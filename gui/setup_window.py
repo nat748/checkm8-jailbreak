@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Inferno emulator setup wizard window.
+Emulator setup wizard window.
 
+Supports both Inferno and pongoOS setup with tabbed interface.
 Opens as a CTkToplevel with a step list on the left and a
 detail/log area on the right, following the liquid glass style.
 """
@@ -31,6 +32,7 @@ from config.constants import (
     WIZARD_HEIGHT,
 )
 from config.setup_steps import detect_platform, get_steps_for_platform, SETUP_STEPS
+from config.pongoos_setup import PONGOOS_STEPS, get_steps_for_platform as get_pongoos_steps
 from core.setup_engine import SetupEngine
 
 _STATUS_SYMBOLS = {
@@ -68,34 +70,75 @@ _PLATFORM_LABELS = {
 
 class SetupWindow(ctk.CTkToplevel):
 
-    def __init__(self, parent):
+    def __init__(self, parent, emulator_type="inferno"):
         super().__init__(parent)
 
-        self.title("Inferno Setup Wizard")
+        self.title("Emulator Setup Wizard")
         self.geometry(f"{WIZARD_WIDTH}x{WIZARD_HEIGHT}")
-        self.minsize(700, 500)
+        self.minsize(800, 600)
         self.configure(fg_color=COLOR_BG)
 
         self._platform = detect_platform()
-        self._steps = get_steps_for_platform(self._platform)
-        self._step_status = {s["id"]: "manual" if not s.get("automated") else "pending"
-                             for s in self._steps}
-        self._selected_step = self._steps[0]["id"] if self._steps else None
+        self._emulator_type = emulator_type  # "inferno" or "pongoos"
+        self._steps = []
+        self._step_status = {}
+        self._selected_step = None
         self._engine = None
         self._worker_thread = None
         self._log_queue = queue.Queue()
         self._step_queue = queue.Queue()
-
-        # Default work dir
-        if self._platform == "windows":
-            self._work_dir = "$HOME/InfernoData"
-        else:
-            import os
-            self._work_dir = os.path.expanduser("~/InfernoData")
+        self._work_dir = ""
 
         self._build_ui()
+        self._load_emulator_steps(emulator_type)
         self._poll_queues()
-        self._select_step(self._steps[0]["id"] if self._steps else None)
+
+    # ── Emulator type switching ─────────────────────────────────
+
+    def _load_emulator_steps(self, emulator_type):
+        """Load steps for the selected emulator type."""
+        self._emulator_type = emulator_type
+
+        if emulator_type == "pongoos":
+            self._steps = get_pongoos_steps(self._platform)
+            if self._platform == "windows":
+                self._work_dir = "$HOME/PongoOSData"
+            else:
+                import os
+                self._work_dir = os.path.expanduser("~/PongoOSData")
+        else:  # inferno
+            self._steps = get_steps_for_platform(self._platform)
+            if self._platform == "windows":
+                self._work_dir = "$HOME/InfernoData"
+            else:
+                import os
+                self._work_dir = os.path.expanduser("~/InfernoData")
+
+        self._step_status = {s["id"]: "manual" if not s.get("automated") else "pending"
+                             for s in self._steps}
+        self._selected_step = self._steps[0]["id"] if self._steps else None
+
+        # Update UI
+        self._refresh_step_list()
+        self._dir_entry.delete(0, "end")
+        self._dir_entry.insert(0, self._work_dir)
+        if self._selected_step:
+            self._select_step(self._selected_step)
+
+    def _refresh_step_list(self):
+        """Clear and rebuild the step list."""
+        # Clear existing rows
+        for widget in self._step_frame.winfo_children():
+            widget.destroy()
+
+        self._step_rows = {}
+        for i, step in enumerate(self._steps):
+            self._make_step_row(step, i)
+
+    def _on_emulator_changed(self, value):
+        """Handle emulator type selection change."""
+        emu_type = value.lower()
+        self._load_emulator_steps(emu_type)
 
     # ── UI construction ─────────────────────────────────────────
 
@@ -105,13 +148,33 @@ class SetupWindow(ctk.CTkToplevel):
                            border_width=GLASS_BORDER_WIDTH, border_color=COLOR_GLASS_BORDER)
         hdr.pack(fill="x", padx=12, pady=(12, 6))
 
-        ctk.CTkLabel(hdr, text="Inferno Setup Wizard",
-                     font=ctk.CTkFont(size=18, weight="bold"),
-                     text_color=COLOR_ACCENT).pack(side="left", padx=18, pady=12)
+        # Title and emulator selector
+        title_row = ctk.CTkFrame(hdr, fg_color="transparent")
+        title_row.pack(fill="x", padx=18, pady=12)
 
-        ctk.CTkLabel(hdr, text=_PLATFORM_LABELS.get(self._platform, self._platform),
+        ctk.CTkLabel(title_row, text="Emulator Setup Wizard",
+                     font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color=COLOR_ACCENT).pack(side="left")
+
+        # Emulator type selector
+        self._emu_selector = ctk.CTkSegmentedButton(
+            title_row,
+            values=["Inferno", "pongoOS"],
+            font=ctk.CTkFont(size=12),
+            fg_color=COLOR_GLASS_LIGHT,
+            selected_color=COLOR_ACCENT,
+            selected_hover_color=COLOR_ACCENT_HOVER,
+            unselected_color=COLOR_GLASS_LIGHT,
+            unselected_hover_color=COLOR_GLASS_BORDER,
+            text_color=COLOR_TEXT_DIM,
+            command=self._on_emulator_changed,
+        )
+        self._emu_selector.set("Inferno" if self._emulator_type == "inferno" else "pongoOS")
+        self._emu_selector.pack(side="left", padx=(20, 0))
+
+        ctk.CTkLabel(title_row, text=_PLATFORM_LABELS.get(self._platform, self._platform),
                      font=ctk.CTkFont(size=12),
-                     text_color=COLOR_TEXT_DIM).pack(side="right", padx=18)
+                     text_color=COLOR_TEXT_DIM).pack(side="right")
 
         # Main body: two-column
         body = ctk.CTkFrame(self, fg_color="transparent")
@@ -368,6 +431,7 @@ class SetupWindow(ctk.CTkToplevel):
 
         self._engine = SetupEngine(
             self._platform, self._work_dir,
+            emulator_type=self._emulator_type,
             log_callback=self._log_t,
             step_callback=self._step_t,
         )

@@ -20,7 +20,7 @@ from config.constants import COLOR_BG, BLOB_COLORS
 # Render at this fraction of display size for smooth blur
 RENDER_SCALE = 0.20
 FRAME_MS = 200  # 5 fps — keeps CPU free for the emulator
-BG_RGB = (8, 8, 26)
+BG_RGB = (85, 153, 221)  # Light blue backdrop (iOS style)
 
 
 def _make_blob(size, color, alpha):
@@ -58,13 +58,14 @@ class _Blob:
 
 
 # Blob definitions: (display_size, color_index, base_x%, base_y%, spd_x, spd_y, phase, alpha)
+# Higher alpha values for visibility on light background
 _BLOB_DEFS = [
-    (600, 0, 0.20, 0.25, 0.22, 0.16, 0.0, 170),
-    (700, 1, 0.65, 0.35, 0.16, 0.24, 1.0, 150),
-    (500, 2, 0.82, 0.18, 0.20, 0.14, 2.0, 140),
-    (550, 3, 0.30, 0.70, 0.26, 0.18, 3.0, 120),
-    (650, 4, 0.08, 0.60, 0.14, 0.20, 4.0, 140),
-    (400, 5, 0.50, 0.12, 0.18, 0.22, 5.0, 100),
+    (600, 0, 0.20, 0.25, 0.22, 0.16, 0.0, 200),
+    (700, 1, 0.65, 0.35, 0.16, 0.24, 1.0, 190),
+    (500, 2, 0.82, 0.18, 0.20, 0.14, 2.0, 180),
+    (550, 3, 0.30, 0.70, 0.26, 0.18, 3.0, 170),
+    (650, 4, 0.08, 0.60, 0.14, 0.20, 4.0, 190),
+    (400, 5, 0.50, 0.12, 0.18, 0.22, 5.0, 160),
 ]
 
 
