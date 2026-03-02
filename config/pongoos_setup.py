@@ -35,7 +35,14 @@ PONGOOS_STEPS = [
     {
         "id": "pongo_deps",
         "name": "Install Dependencies",
-        "description": "Install QEMU and build tools",
+        "description": "Install build tools and QEMU dependencies",
+        "platforms": ["windows", "linux", "macos", "macos-arm64"],
+        "automated": True,
+    },
+    {
+        "id": "pongo_qemu",
+        "name": "Build UTMapp QEMU",
+        "description": "Build patched QEMU with pongoOS memory layout",
         "platforms": ["windows", "linux", "macos", "macos-arm64"],
         "automated": True,
     },
@@ -64,20 +71,14 @@ PONGOOS_STEPS = [
 
 
 def _script_install_deps(platform, work_dir):
-    """Install QEMU emulator and build tools."""
+    """Install build dependencies for UTMapp QEMU and pongoOS."""
     if is_macos(platform):
         arch_note = "ARM64 (Apple Silicon)" if platform == "macos-arm64" else "x86_64 (Intel)"
         return f'''
 echo "SS_INFO:Detected macOS {arch_note}"
-echo "SS_INFO:Installing QEMU via Homebrew..."
-brew install qemu || exit 1
-echo "SS_INFO:Verifying QEMU installation..."
-if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
-    echo "SS_ERROR:qemu-system-aarch64 not found after install"
-    exit 1
-fi
-echo "SS_INFO:QEMU installed successfully"
-qemu-system-aarch64 --version
+echo "SS_INFO:Installing build dependencies via Homebrew..."
+brew install ninja meson glib pixman || exit 1
+echo "SS_INFO:Dependencies installed successfully"
 '''
     # linux / windows (WSL)
     return '''
@@ -86,18 +87,81 @@ if ! sudo -n true 2>/dev/null; then
     echo "SS_ERROR:sudo requires a password. Set up passwordless sudo first."
     exit 1
 fi
-echo "SS_INFO:Installing QEMU and build tools via apt..."
+echo "SS_INFO:Installing QEMU build dependencies via apt..."
 sudo -n apt-get update || exit 1
-sudo -n apt-get install -y qemu-system-arm qemu-system-aarch64 \
+sudo -n apt-get install -y ninja-build meson pkg-config python3 \
+    libglib2.0-dev libpixman-1-dev libfdt-dev zlib1g-dev \
     automake make autoconf git wget tar xz-utils lzma xxd || exit 1
-echo "SS_INFO:Verifying QEMU installation..."
-if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
-    echo "SS_ERROR:qemu-system-aarch64 not found after install"
+echo "SS_INFO:Dependencies installed successfully"
+'''
+
+
+def _script_build_utm_qemu(platform, work_dir):
+    """Build UTMapp QEMU with pongoOS memory patch (all platforms)."""
+    return f'''
+cd "{work_dir}" || exit 1
+QEMU_DIR="{work_dir}/utm-qemu"
+QEMU_BUILD="{work_dir}/utm-qemu-build"
+
+# Clone UTMapp QEMU if not exists
+if [ -d "$QEMU_DIR/.git" ]; then
+    echo "SS_INFO:UTMapp QEMU already cloned, pulling latest..."
+    cd "$QEMU_DIR" || exit 1
+    git pull || exit 1
+else
+    echo "SS_INFO:Cloning UTMapp QEMU (this may take a few minutes)..."
+    git clone --depth 1 https://github.com/utmapp/qemu.git "$QEMU_DIR" || exit 1
+    cd "$QEMU_DIR" || exit 1
+fi
+
+# Apply pongoOS memory patch
+echo "SS_INFO:Applying pongoOS memory layout patch..."
+VIRT_C="hw/arm/virt.c"
+if ! grep -q "0x800000000" "$VIRT_C" 2>/dev/null; then
+    echo "SS_INFO:Patching $VIRT_C..."
+    # Backup original
+    cp "$VIRT_C" "$VIRT_C.bak" 2>/dev/null || true
+    # Apply patch: change [VIRT_MEM] = {{ GiB, to {{ 0x800000000,
+    sed -i 's/\\[VIRT_MEM\\][[:space:]]*=[[:space:]]*{{[[:space:]]*GiB,/[VIRT_MEM] = {{ 0x800000000,/g' "$VIRT_C" || exit 1
+    echo "SS_INFO:Patch applied successfully"
+else
+    echo "SS_INFO:Patch already applied"
+fi
+
+# Configure QEMU build (minimal targets for pongoOS)
+echo "SS_INFO:Configuring QEMU build (aarch64 target only)..."
+rm -rf "$QEMU_BUILD"
+mkdir -p "$QEMU_BUILD"
+cd "$QEMU_BUILD" || exit 1
+
+meson setup "$QEMU_DIR" \
+    --prefix=/opt/utm-qemu \
+    --buildtype=release \
+    -Ddefault_devices=false \
+    -Dtargets=aarch64-softmmu \
+    -Daudio_drv_list= \
+    -Dblock_drv_rw_whitelist= \
+    -Dblock_drv_ro_whitelist= \
+    -Ddocs=disabled \
+    -Dtools=disabled || exit 1
+
+# Build QEMU (use all CPU cores)
+echo "SS_INFO:Building QEMU (this may take 10-15 minutes)..."
+echo "SS_INFO:Using $(nproc 2>/dev/null || echo 4) CPU cores..."
+ninja -j$(nproc 2>/dev/null || echo 4) || exit 1
+
+# Install to /opt/utm-qemu
+echo "SS_INFO:Installing QEMU to /opt/utm-qemu..."
+sudo -n ninja install || exit 1
+
+# Verify installation
+if [ -f "/opt/utm-qemu/bin/qemu-system-aarch64" ]; then
+    echo "SS_INFO:UTMapp QEMU installed successfully"
+    /opt/utm-qemu/bin/qemu-system-aarch64 --version | head -1
+else
+    echo "SS_ERROR:QEMU binary not found after install"
     exit 1
 fi
-echo "SS_INFO:QEMU installed successfully"
-qemu-system-aarch64 --version
-echo "SS_INFO:Build tools installed successfully"
 '''
 
 
@@ -177,11 +241,18 @@ else
 fi
 cd "{work_dir}/pongoOS-src" || exit 1
 '''
-    # Strip -Werror from all Makefiles
-    strip_werror = '''
-echo "SS_INFO:Patching Makefiles to disable -Werror..."
+    # Patch source for Linux cross-compilation compatibility
+    patch_source = '''
+echo "SS_INFO:Patching Makefiles for Linux cross-compilation..."
 find . -name "Makefile" -o -name "*.mk" | while read mf; do
-    sed -i.bak 's/-Werror//g' "$mf" 2>/dev/null || true
+    sed -i.bak 's/-Werror//g; s/-flto//g; s/-Wl,-fatal_warnings//g' "$mf" 2>/dev/null || true
+done
+echo "SS_INFO:Patching missing includes for Linux cross-compilation..."
+grep -rl 'va_start' --include='*.c' . 2>/dev/null | while read f; do
+    if ! grep -q '#include <stdarg.h>' "$f"; then
+        sed -i '1i #include <stdarg.h>' "$f"
+        echo "SS_INFO:  Added stdarg.h to $f"
+    fi
 done
 '''
     # Verify and copy output
@@ -217,7 +288,7 @@ ls -lh "{work_dir}/pongoOS"
 
     if is_macos(platform):
         # macOS: build natively with Xcode toolchain
-        return clone_block + strip_werror + '''
+        return clone_block + patch_source + '''
 echo "SS_INFO:Building pongoOS with Xcode toolchain..."
 xcode-select --install 2>/dev/null || true
 make clean || true
@@ -226,7 +297,7 @@ make || exit 1
 
     # Linux / Windows (WSL): build with system clang + ld64 + cctools-strip
     # (official checkra1n build method)
-    return clone_block + strip_werror + '''
+    return clone_block + patch_source + '''
 # Verify cross-compilation tools are installed
 if ! command -v clang >/dev/null 2>&1; then
     echo "SS_ERROR:clang not found. Run the Setup Toolchain step first."
@@ -246,7 +317,7 @@ echo "SS_INFO:clang: $(clang --version 2>&1 | head -1)"
 
 echo "SS_INFO:Building pongoOS..."
 make clean || true
-EMBEDDED_CC=clang EMBEDDED_LDFLAGS="-fuse-ld=/usr/bin/ld64" STRIP=cctools-strip make all || exit 1
+EMBEDDED_CC="clang -target arm64-apple-ios12.0.0 -fuse-ld=/usr/bin/ld64 -fcommon" STRIP=cctools-strip make all || exit 1
 ''' + verify_block
 
 
@@ -259,8 +330,17 @@ if [ ! -f "pongoOS" ]; then
     echo "SS_ERROR:pongoOS binary not found at {work_dir}/pongoOS"
     exit 1
 fi
+if [ ! -f "/opt/utm-qemu/bin/qemu-system-aarch64" ]; then
+    echo "SS_ERROR:UTMapp QEMU not found. Run 'Build UTMapp QEMU' step first."
+    exit 1
+fi
 echo "SS_INFO:Starting QEMU test (will timeout after 5 seconds)..."
-timeout 5 qemu-system-aarch64 -M virt -cpu cortex-a57 -m 512M -kernel pongoOS -nographic -serial stdio || true
+echo "SS_INFO:Using UTMapp QEMU with pongoOS loader method..."
+timeout 5 /opt/utm-qemu/bin/qemu-system-aarch64 \
+    -M virt -cpu cortex-a72 -accel tcg -m 4096 \
+    -device loader,file=pongoOS,addr=0x1000,force-raw=on \
+    -device loader,addr=0x1000,cpu-num=0 \
+    -nographic </dev/null || true
 echo "SS_INFO:pongoOS test completed"
 echo "SS_INFO:Setup complete! Use Launch Emulator to start pongoOS."
 '''
@@ -280,6 +360,7 @@ def get_script_for_step(step_id, platform, work_dir):
     """
     scripts = {
         "pongo_deps": _script_install_deps,
+        "pongo_qemu": _script_build_utm_qemu,
         "pongo_toolchain": _script_setup_toolchain,
         "pongo_download": _script_download_pongoos,
         "pongo_test": _script_test_pongoos,

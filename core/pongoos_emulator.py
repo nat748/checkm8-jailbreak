@@ -28,8 +28,28 @@ class PongoOSEmulator:
         self._process = None
         self._running = False
         self._monitor_thread = None
-        self._work_dir = Path.home() / "PongoOSData"
         self._system = platform.system().lower()
+
+        # Use WSL path on Windows (setup wizard builds pongoOS in WSL)
+        if self._system == "windows":
+            # Get WSL home directory
+            try:
+                result = subprocess.run(
+                    ["wsl", "-d", "Ubuntu", "--", "bash", "-c", "echo $HOME"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                wsl_home = result.stdout.strip()
+                self._work_dir = Path(f"\\\\wsl$\\Ubuntu{wsl_home}\\PongoOSData")
+                self._wsl_work_dir = f"{wsl_home}/PongoOSData"
+            except Exception:
+                # Fallback to default
+                self._work_dir = Path.home() / "PongoOSData"
+                self._wsl_work_dir = "/home/$USER/PongoOSData"
+        else:
+            self._work_dir = Path.home() / "PongoOSData"
+            self._wsl_work_dir = str(self._work_dir)
 
     @property
     def running(self) -> bool:
@@ -162,20 +182,27 @@ class PongoOSEmulator:
         Returns:
             QEMU command as list of arguments, or None if failed
         """
-        # Determine QEMU executable
-        qemu_exec = "qemu-system-aarch64"
+        # Use patched UTMapp QEMU (required for pongoOS memory layout)
+        qemu_exec = "/opt/utm-qemu/bin/qemu-system-aarch64"
 
-        # Build command
+        # Use WSL path for kernel if on Windows
+        if self._system == "windows":
+            kernel_path = f"{self._wsl_work_dir}/pongoOS"
+        else:
+            kernel_path = str(pongo_bin)
+
+        # Build command (using loader method from citruz/pongoOS-QEMU)
         cmd = [
             qemu_exec,
             "-M", "virt",  # Virtual ARM board
-            "-cpu", "cortex-a57",  # ARM Cortex-A57
-            "-m", "512M",  # 512MB RAM
-            "-kernel", str(pongo_bin),  # Boot pongoOS directly
-            "-nographic",  # No GUI, console only
-            "-serial", "mon:stdio",  # Serial console to stdout
+            "-cpu", "cortex-a72",  # ARM Cortex-A72 (per citruz README)
+            "-accel", "tcg",  # TCG emulation
+            "-m", "4096",  # 4GB RAM (per citruz README)
+            "-device", f"loader,file={kernel_path},addr=0x1000,force-raw=on",  # Load pongoOS at 0x1000
+            "-device", "loader,addr=0x1000,cpu-num=0",  # Set CPU entry point
+            "-nographic",  # Console output only (GUI in log panel)
+            "-serial", "mon:stdio",  # Serial + monitor to stdout
             "-no-reboot",  # Exit on reboot
-            "-d", "guest_errors",  # Debug guest errors
         ]
 
         # Add USB controller for DFU emulation
