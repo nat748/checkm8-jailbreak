@@ -317,43 +317,42 @@ class BootstrapInstaller:
             script = script.replace("__ZEBRA_URL__", _PKG_URLS["zebra"])
             script = script.replace("__CYDIA_URL__", _PKG_URLS["cydia"])
 
+            # Clean script - remove ALL Windows line endings
+            script = script.replace("\r\n", "\n").replace("\r", "\n")
+            script = "\n".join(line.rstrip() for line in script.split("\n"))
+
             # Inject sudo password if provided
             if self._sudo_password:
-                # Escape single quotes in password for bash
                 escaped_pwd = self._sudo_password.replace("'", "'\\''")
                 pwd_line = f"SUDO_PASSWORD='{escaped_pwd}'\n"
                 script = pwd_line + script
-                # Replace sudo -n with piped password sudo -S
                 script = script.replace("sudo -n", "echo \"$SUDO_PASSWORD\" | sudo -S")
 
             # Pipe the script via stdin to avoid Windows command-line
             # quoting mangling the double quotes and $variables.
             wsl_cmd = ["wsl", "-d", WSL_DISTRO, "--", "bash", "-s", self._package_manager]
 
+            # Use binary stdin to prevent Windows text-mode from
+            # converting \n to \r\n.
             self._process = subprocess.Popen(
                 wsl_cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
+                bufsize=0,
             )
-            self._process.stdin.write(script.replace('\r', ''))
+            # Encode to bytes with pure LF — no OS line-ending conversion
+            self._process.stdin.write(script.encode("utf-8"))
             self._process.stdin.close()
 
-            # Use readline() — the file iterator (for line in ...) has an
-            # internal read-ahead buffer that prevents real-time output.
-            while True:
-                line = self._process.stdout.readline()
-                if not line:
-                    break
-
+            # Read stdout as bytes, decode line by line
+            for raw_line in iter(self._process.stdout.readline, b""):
                 if self._cancel_event.is_set():
                     self._process.terminate()
                     self._log("warning", "Bootstrap installation cancelled")
                     return False
 
-                line = line.strip()
+                line = raw_line.decode("utf-8", errors="replace").strip()
                 if not line:
                     continue
 

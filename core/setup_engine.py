@@ -91,8 +91,7 @@ class SetupEngine:
             else:
                 cmd = ["bash", "-e"]  # Exit on error
 
-            # Clean script - aggressively remove ALL Windows line endings
-            # Must do this BEFORE adding preamble
+            # Clean script - remove ALL Windows line endings
             clean_script = script.replace("\r\n", "\n").replace("\r", "\n")
 
             # Remove any trailing whitespace from each line
@@ -100,51 +99,36 @@ class SetupEngine:
 
             # Inject sudo password if provided
             if self._sudo_password:
-                # Escape single quotes in password for bash
                 escaped_pwd = self._sudo_password.replace("'", "'\\''")
                 pwd_line = f"SUDO_PASSWORD='{escaped_pwd}'\n"
                 clean_script = pwd_line + clean_script
-                # Replace sudo -n with piped password sudo -S
                 clean_script = clean_script.replace("sudo -n", "echo \"$SUDO_PASSWORD\" | sudo -S")
 
-            # Add error handling (with Unix line endings only)
+            # Add error handling
             clean_script = "set -e\nset -o pipefail\n" + clean_script
 
-            # Final cleanup - ensure no \r anywhere
-            clean_script = clean_script.replace("\r", "")
-
+            # Use binary stdin to prevent Windows text-mode from
+            # converting \n to \r\n.  Read stdout as text (safe
+            # because we only read, never write).
             self._process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
+                bufsize=0,
             )
-            # DEBUG: Log first 500 chars of clean script to see what we're sending
-            debug_script = clean_script.replace('\r', '')
-            import sys
-            with open('C:/Users/natha/script_debug.txt', 'w', encoding='utf-8', newline='\n') as f:
-                f.write(debug_script[:1000])
-                f.write("\n\n=== REPR ===\n")
-                f.write(repr(debug_script[:500]))
-
-            # Final replace right before writing - text mode on Windows
-            # will convert \n to \r\n, so strip any \r that got added
-            self._process.stdin.write(debug_script)
+            # Encode to bytes with pure LF — no OS line-ending conversion
+            self._process.stdin.write(clean_script.encode("utf-8"))
             self._process.stdin.close()
 
-            while True:
-                line = self._process.stdout.readline()
-                if not line:
-                    break
-
+            # Read stdout as bytes, decode line by line
+            for raw_line in iter(self._process.stdout.readline, b""):
                 if self._cancel_event.is_set():
                     self._process.terminate()
                     self._log("warning", "Step cancelled")
                     return False
 
-                line = line.rstrip("\n\r")
+                line = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
                 if not line:
                     continue
 
